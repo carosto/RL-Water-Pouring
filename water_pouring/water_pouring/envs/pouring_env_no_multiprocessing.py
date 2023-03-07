@@ -1,4 +1,3 @@
-import time
 import gymnasium as gym
 from gymnasium import spaces
 
@@ -6,7 +5,7 @@ import numpy as np
 
 from scipy.spatial.transform import Rotation as R
 
-from water_pouring.envs.simulation_no_multiprocessing import Simulation
+from simulation_no_multiprocessing import Simulation
 
 class PouringEnv(gym.Env):
   '''Custom Environment that follows gym interface'''
@@ -43,34 +42,17 @@ class PouringEnv(gym.Env):
                               spaces.Box(low=-5, high=5, shape=(3,)),
                               spaces.Box(low=-10, high=10, shape=(4,)))) # TODO create useful observations (currently just using position and rotation of jug)
 
-    #multiprocessing.set_start_method('spawn') # default on Windows, Linux default is fork
-    """self.simulation_manager = multiprocessing.Manager()
-    self.command_queue = self.simulation_manager.Queue()
-    self.communication_manager = self.simulation_manager.dict() #TODO check ob das entfernt werden kann!
-    self.make_next_step = self.simulation_manager.Event()"""
-
     self.simulation = Simulation(self.use_gui, self.output_directory, self.jug_start_position,
                                     self.cup_position)
-    
-    """self.simulation_process = multiprocessing.Process(target=Simulation, 
-                                    args=(self.use_gui, self.output_directory, self.jug_start_position,
-                                    self.cup_position, self.command_queue, self.communication_manager, self.make_next_step))
-    self.simulation_process.daemon = True""" # make sure the simulation process exits when the main process ends
 
     self.reset()
-  
-  def seed(self, seed):
-    np.random.seed(seed) #TODO needed for the TD3 implementation?
 
   def step(self, action):
-    # wait for the simulation if it is still executing a step
-
     # Execute one time step within the environment
     movement_vector = action[0][:3]
     movement_speed = action[0][3]
     normalized_movement = movement_vector / np.linalg.norm(movement_vector)
     position_change = normalized_movement * movement_speed
-    print('Position change: ', position_change)
 
     rotation_vector = action[1][:3]
     rotation_speed = action[1][3]
@@ -118,19 +100,6 @@ class PouringEnv(gym.Env):
   def render(self, mode='human', close=False):
     # Render the environment to the screen
     return NotImplementedError
-
-  """def stop_simulation_process(self):
-
-    # allowing the simulation process to shut down within 5 seconds, otherwise it is terminated by the main process 
-    start = time.time()
-    while time.time() - start <= 5:
-      # if the simulation process has ended within the time limit
-      if not self.simulation_process.is_alive():
-        break
-    else: # If the process was not terminated within the time limit, it is terminated manually
-      self.simulation_process.terminate()
-      self.simulation_process.join()"""
-
 
 if __name__ == "__main__":
   env = PouringEnv(use_gui=False)

@@ -59,10 +59,6 @@ class Simulation():
                 stopAt=5,
                 outputDir= self.output_directory
             )
-
-        # Create an imgui simulator
-        gui = sph.GUI.Simulator_GUI_imgui(base)
-        base.setGui(gui)
         
         base.setTimeStepCB(self.__time_step_callback)
 
@@ -152,13 +148,11 @@ class Simulation():
             fluid_model.setAcceleration(i, [0.0, 0.0, 0.0])
         
         self.base = base
-        self.base.deferredInit()
+        self.base.finishInitialization()
 
     def __time_step_callback(self):  
         sim = sph.Simulation.getCurrent()
 
-        # sets make_next_step event to false -> agent does not continue making steps
-        # otherwise there would be issues with evaluating the correct particle positions for the agent's reward
         position_change = self.next_position[0]
         rotation_change = self.next_position[1]
 
@@ -172,7 +166,6 @@ class Simulation():
         new_rotation = R.from_euler('XYZ', old_rotation + rotation_change, degrees=True)
         animated_body.setRotation(new_rotation.as_quat())
         animated_body.animate()
-        #self.communications_manager['current_jug_pose'] = [new_position, new_rotation]
 
         # keep the cup at a constant position
         # TODO ist das nötig? (ansonsten macht das return oben schwierigkeiten!)
@@ -182,18 +175,9 @@ class Simulation():
         animated_body.setRotation(self.cup_position[3:])
         animated_body.animate()    
 
-        #self.__count_particles() 
+        self.__count_particles() 
 
-        #self.__check_collision()
-
-        """elif command == 'STOP':
-            # change stopAt value of the simulation to cause the end of the simulation
-            current_time = sph.TimeManager.getCurrent().getTime()
-            self.base.setValueFloat(self.base.STOP_AT, 0.01 if current_time - 1 < 0 else current_time - 1) # StopAt has to be higher than 0
-            return"""
-
-        # keep the simulation running until the process is stopped
-        #self.base.setValueFloat(self.base.STOP_AT, sph.TimeManager.getCurrent().getTime() + 5)
+        self.__check_collision()
 
     def __move_bounds(self, bounds, new_position):
         #assumes that the object was originally positioned at [0,0,0]
