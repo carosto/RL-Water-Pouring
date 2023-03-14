@@ -8,7 +8,7 @@ from scipy.spatial.transform import Rotation as R
 
 import multiprocessing
 
-from water_pouring.envs.simulation import Simulation
+from water_pouring.envs.simulation_multiprocessing import Simulation
 
 class PouringEnv(gym.Env):
   '''Custom Environment that follows gym interface'''
@@ -142,7 +142,7 @@ class PouringEnv(gym.Env):
       self.simulation_process.join()
 
 
-"""if __name__ == "__main__":
+if __name__ == "__main__":
   env = PouringEnv(use_gui=False)
   #obs = env.reset(use_gui=True)
 
@@ -158,5 +158,5 @@ class PouringEnv(gym.Env):
       if done == True:
           break
 
-  env.close()"""
+  env.close()
 

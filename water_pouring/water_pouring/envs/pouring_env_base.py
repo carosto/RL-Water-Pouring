@@ -5,22 +5,25 @@ import numpy as np
 
 from scipy.spatial.transform import Rotation as R
 
-from simulation_no_multiprocessing import Simulation
+from simulation import Simulation
 
-class PouringEnv(gym.Env):
+class PouringEnvBase(gym.Env):
   '''Custom Environment that follows gym interface'''
   metadata = {'render.modes': ['human']}
 
-  def __init__(self, use_gui=False, spill_punish=1.5):
+  def __init__(self, use_gui=False, spill_punish=1.5, jug_start_position=None):
     #super(CustomEnv, self).__init__()
 
     self.cup_position = [0, 0, 0] 
     cup_rotation = R.from_euler('XYZ', [-90, 0, 0], degrees=True)
     self.cup_position.extend(cup_rotation.as_quat())
 
-    self.jug_start_position = [0.5, 0, 0.5]
-    jug_start_rotation = R.from_euler('XYZ', [90, 180, 0], degrees=True)
-    self.jug_start_position.extend(jug_start_rotation.as_quat())
+    if jug_start_position is None:
+      self.jug_start_position = [0.5, 0, 0.5]
+      jug_start_rotation = R.from_euler('XYZ', [90, 180, 0], degrees=True)
+      self.jug_start_position.extend(jug_start_rotation.as_quat())
+    else:
+      self.jug_start_position = jug_start_position
 
     self.output_directory = '../SimulationOutput'
 
@@ -30,17 +33,9 @@ class PouringEnv(gym.Env):
 
     # Define action and observation space
     # They must be gym.spaces objects
-    # Action space: 2 4-dimensional vectors
-    # first vector = direction + velocity of movement (x, y, z, velocity)
-    # second vector = direction of rotation (x, y, z, velocity)
-    # TODO: set low and high (independent bounds are possible, given as list)
-    self.action_space = spaces.Tuple((
-                          spaces.Box(low=-0.1, high=0.1, shape=(4,)),
-                          spaces.Box(low=0, high=1, shape=(4,))))
+    self.action_space = None
 
-    self.observation_space = spaces.Tuple((
-                              spaces.Box(low=-5, high=5, shape=(3,)),
-                              spaces.Box(low=-10, high=10, shape=(4,)))) # TODO create useful observations (currently just using position and rotation of jug)
+    self.observation_space = None
 
     self.simulation = Simulation(self.use_gui, self.output_directory, self.jug_start_position,
                                     self.cup_position)
@@ -69,7 +64,7 @@ class PouringEnv(gym.Env):
     return observation, reward, self.done, {}
   
   def __observe(self): #TODO
-    return None #return self.communication_manager['current_jug_pose']
+    return None
 
   def __reward(self):
     n_particles_cup = self.simulation.n_particles_cup
@@ -102,7 +97,7 @@ class PouringEnv(gym.Env):
     return NotImplementedError
 
 if __name__ == "__main__":
-  env = PouringEnv(use_gui=False)
+  env = PouringEnvBase(use_gui=False)
   #obs = env.reset(use_gui=True)
 
   while True:

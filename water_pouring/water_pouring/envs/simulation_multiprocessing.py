@@ -13,11 +13,14 @@ import numpy as np
 
 class Simulation():
 
-    def __init__(self, use_gui, output_directory, jug_start_position, cup_position):
+    def __init__(self, use_gui, output_directory, jug_start_position, cup_position, command_queue, communications_manager, make_next_step):
         self.use_gui = use_gui
         self.output_directory = output_directory
         self.jug_start_position = jug_start_position
         self.cup_position = cup_position
+        self.command_queue = command_queue
+        self.communications_manager = communications_manager
+        self.make_next_step = make_next_step
         
         self.particles_ids_cup = []
         self.particles_ids_jug = []
@@ -50,15 +53,19 @@ class Simulation():
         self.jug_obj = pyvista.read(f"water_pouring/water_pouring/envs/ObjectFiles/{self.jug_name}.obj")
         self.spilled_collector_grid = pyvista.read("water_pouring/water_pouring/envs/ObjectFiles/UnitBox_open.obj")
 
-        self.__init_simulation()
+        self.run_simulation()
 
-    def __init_simulation(self):
+    def run_simulation(self):
         base = sph.Exec.SimulatorBase()
         base.init(
                 useGui=self.use_gui, sceneFile=os.path.abspath('water_pouring/water_pouring/envs/scene.json'),
                 stopAt=5,
                 outputDir= self.output_directory
             )
+
+        # Create an imgui simulator
+        gui = sph.GUI.Simulator_GUI_imgui(base)
+        base.setGui(gui)
         
         base.setTimeStepCB(self.__time_step_callback)
 
@@ -68,7 +75,7 @@ class Simulation():
         # Add the jug
         jug_file = f'{self.jug_name}.obj'
         rots = R.from_quat(self.jug_start_position[3:])
-        r = np.linalg.norm(rots.as_rotvec())
+        r = rots.as_matrix()
         scene.boundaryModels.append(
                 Scenes.BoundaryData(
                     meshFile=f'ObjectFiles/{jug_file}',
@@ -76,8 +83,7 @@ class Simulation():
                     scale=[1, 1, 1],
                     color=[0.5, 0.5, 0.5, 1.0],
                     isAnimated=True,
-                    axis=[1,0,0],
-                    angle=r,
+                    rotation=r,
                     isWall=False,
                     mapInvert=False,
                     mapResolution=[25, 25, 25],
@@ -87,7 +93,7 @@ class Simulation():
         # Add the cup
         cup_file = f'{self.cup_name}.obj'
         rots = R.from_quat(self.cup_position[3:])
-        r = np.linalg.norm(rots.as_rotvec())
+        r = rots.as_matrix()
         scene.boundaryModels.append(
                 Scenes.BoundaryData(
                     meshFile=f'ObjectFiles/{cup_file}',
@@ -95,8 +101,7 @@ class Simulation():
                     scale=[1, 1, 1],
                     color=[0.5, 0.5, 0.5, 1.0],
                     isAnimated=True,
-                    axis=[1,0,0],
-                    angle=r,
+                    rotation=r,
                     isWall=False,
                     mapInvert=False,
                     mapResolution=[25, 25, 25],
@@ -115,7 +120,7 @@ class Simulation():
             scale=self.cup_scale, # different scale possible for different objects
             color=[0.1, 0.4, 0.5, 1.0], isWall=False, mapInvert=True, mapResolution=[25, 25, 25]))
 
-        #scene.camPosition = [1, 2, 2.]
+        scene.camPosition = [1, 2, 2.]
 
         fluid_init_pos = np.array(self.jug_start_position[:3])
         fluid_init_pos_upper = fluid_init_pos + [0.07, 0.175, 0.07]
@@ -123,8 +128,9 @@ class Simulation():
         scene.fluidBlocks.append(
                 Scenes.FluidBlock(
                     id='Fluid',
-                    boxMin=fluid_init_pos,
-                    boxMax=fluid_init_pos_upper,
+                    box=Scenes.Box(
+                        fluid_init_pos, fluid_init_pos_upper
+                    ),
                     mode=0,
                     initialVelocity=[0.0, 0.0, 0.0],
                 )
@@ -148,36 +154,64 @@ class Simulation():
             fluid_model.setAcceleration(i, [0.0, 0.0, 0.0])
         
         self.base = base
-        self.base.finishInitialization()
 
-    def __time_step_callback(self):  
+        base.runSimulation()
+        base.cleanup()
+
+    def __time_step_callback(self):   
         sim = sph.Simulation.getCurrent()
 
-        position_change = self.next_position[0]
-        rotation_change = self.next_position[1]
+        if not self.command_queue.empty():
+            command = self.command_queue.get()
+        else:
+            self.make_next_step.set()
+            return
 
-        # update the position of the jug
-        boundary = sim.getBoundaryModel(0)  # first object is jug 
-        animated_body = boundary.getRigidBodyObject()
-        new_position = animated_body.getPosition() + position_change
-        animated_body.setPosition(new_position)  
+        if command == 'STEP':
+            # sets make_next_step event to false -> agent does not continue making steps
+            # otherwise there would be issues with evaluating the correct particle positions for the agent's reward
+            self.make_next_step.clear() 
+            position_change = self.communications_manager['step'][0]
+            rotation_change = self.communications_manager['step'][1]
 
-        old_rotation = R.from_quat(animated_body.getRotation()).as_euler('XYZ', degrees=True)
-        new_rotation = R.from_euler('XYZ', old_rotation + rotation_change, degrees=True)
-        animated_body.setRotation(new_rotation.as_quat())
-        animated_body.animate()
+            # update the position of the jug
+            boundary = sim.getBoundaryModel(0)  # first object is jug 
+            animated_body = boundary.getRigidBodyObject()
 
-        # keep the cup at a constant position
-        # TODO ist das nötig? (ansonsten macht das return oben schwierigkeiten!)
-        boundary = sim.getBoundaryModel(1) 
-        animated_body = boundary.getRigidBodyObject()  # second object is cup 
-        animated_body.setPosition(self.cup_position[:3])
-        animated_body.setRotation(self.cup_position[3:])
-        animated_body.animate()    
+            new_position = animated_body.getPosition() + position_change
+            animated_body.setPosition(new_position)  
 
-        self.__count_particles() 
+            old_rotation = R.from_quat(animated_body.getRotation()).as_euler('XYZ', degrees=True)
+            new_rotation = R.from_euler('XYZ', old_rotation + rotation_change, degrees=True)
+            animated_body.setRotation(new_rotation.as_quat())
+            animated_body.animate()
 
-        self.__check_collision()
+            self.communications_manager['current_jug_pose'] = [new_position, new_rotation]
+
+            # keep the cup at a constant position
+            # TODO ist das nötig? (ansonsten macht das return oben schwierigkeiten!)
+            boundary = sim.getBoundaryModel(1) 
+            animated_body = boundary.getRigidBodyObject()  # second object is cup 
+            animated_body.setPosition(self.cup_position[:3])
+            animated_body.setRotation(self.cup_position[3:])
+            animated_body.animate()    
+
+            
+            self.__count_particles() 
+
+            self.__check_collision()
+            
+            self.make_next_step.set() 
+
+
+        elif command == 'STOP':
+            # change stopAt value of the simulation to cause the end of the simulation
+            current_time = sph.TimeManager.getCurrent().getTime()
+            self.base.setValueFloat(self.base.STOP_AT, 0.01 if current_time - 1 < 0 else current_time - 1) # StopAt has to be higher than 0
+            return
+
+        # keep the simulation running until the process is stopped
+        self.base.setValueFloat(self.base.STOP_AT, sph.TimeManager.getCurrent().getTime() + 5)
 
     def __move_bounds(self, bounds, new_position):
         #assumes that the object was originally positioned at [0,0,0]
@@ -297,9 +331,9 @@ class Simulation():
         #all particles within cup, jug and collector
         liq_ids_in_objs = liq_ids_jug + liq_ids_cup 
 
-        self.n_particles_cup = len(liq_ids_cup)
-        self.n_particles_jug = len(liq_ids_jug)
-        self.n_particles_spilled = fluid_model.numberOfParticles() - len(liq_ids_in_objs) # TODO change: flowing particles are currently counted as spilled
+        self.communications_manager['n_particles_cup'] = len(liq_ids_cup)
+        self.communications_manager['n_particles_jug'] = len(liq_ids_jug)
+        self.communications_manager['n_particles_spilled'] = fluid_model.numberOfParticles() - len(liq_ids_in_objs) # TODO change: flowing particles are currently counted as spilled
 
     def __check_collision(self):
         # transform the jug obj to the current pose and check for collisions with the cup obj
@@ -324,8 +358,8 @@ class Simulation():
         _, n_collisions = self.cup_obj.collision(transformed_jug, contact_mode=1)
         
         if n_collisions > 0:
-            self.collision = True
+            self.communications_manager['has_collided'] = True
             return True
         else:
-            self.collision = False
+            self.communications_manager['has_collided'] = False
             return False
