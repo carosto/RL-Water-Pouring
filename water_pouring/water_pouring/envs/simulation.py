@@ -37,9 +37,13 @@ class Simulation():
         self.jug_obj = pyvista.read(f"water_pouring/water_pouring/envs/ObjectFiles/{self.jug_name}.obj")
         self.spilled_collector_grid = pyvista.read("water_pouring/water_pouring/envs/ObjectFiles/UnitBox_open.obj")
 
-        self.__init_simulation()
+        self.n_particles_cup = 0
+        self.n_particles_jug = 0
+        self.n_particles_spilled = 0
 
-    def __init_simulation(self):
+        self.is_initialized = False
+
+    def init_simulation(self):
         base = sph.Exec.SimulatorBase()
         base.init(
                 useGui=self.use_gui, sceneFile=os.path.abspath('water_pouring/water_pouring/envs/scene.json'),
@@ -132,6 +136,12 @@ class Simulation():
         
         self.base = base
         self.base.finishInitialization()
+        self.is_initialized = True
+    
+    def cleanup(self):
+        self.base.cleanup()
+        self.base = None
+        self.is_initialized = False
 
     def __time_step_callback(self):  
         sim = sph.Simulation.getCurrent()
@@ -161,6 +171,10 @@ class Simulation():
         self.__count_particles() 
 
         self.__check_collision()
+
+        # keep the simulation running until the process is stopped
+        self.base.setValueFloat(self.base.STOP_AT, sph.TimeManager.getCurrent().getTime() + 5)
+        
 
     def __get_bounds(self, bounds):
         x_bounds = bounds[:2] # xmin, xmax
@@ -263,3 +277,13 @@ class Simulation():
         else:
             self.collision = False
             return False
+    
+    def get_object_position(self, object_number):
+        # 0 = jug, 1 = cup
+        sim = sph.Simulation.getCurrent()
+        boundary = sim.getBoundaryModel(object_number) 
+        animated_body = boundary.getRigidBodyObject()
+        position = animated_body.getPosition()
+        rotation = animated_body.getRotation()
+
+        return np.append(position, rotation)

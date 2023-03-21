@@ -1,18 +1,17 @@
-import gymnasium as gym
-from gymnasium import spaces
+import gym
+from gym import spaces
 
 import numpy as np
 
 from scipy.spatial.transform import Rotation as R
 
-from simulation import Simulation
+from water_pouring.envs.simulation import Simulation
 
 class PouringEnvBase(gym.Env):
   '''Custom Environment that follows gym interface'''
   metadata = {'render.modes': ['human']}
 
   def __init__(self, use_gui=False, spill_punish=1.5, jug_start_position=None):
-    #super(CustomEnv, self).__init__()
 
     self.cup_position = [0, 0, 0] 
     cup_rotation = R.from_euler('XYZ', [-90, 0, 0], degrees=True)
@@ -33,18 +32,19 @@ class PouringEnvBase(gym.Env):
 
     # Define action and observation space
     # They must be gym.spaces objects
-    self.action_space = None
+    self.action_space = spaces.Tuple((spaces.Box(low=-1, high=1, shape=(3,)),
+                                      spaces.Box(low=-1, high=1, shape=(3,)))) # action space needs to be implemented for everything to run
 
-    self.observation_space = None
+    self.observation_space = spaces.Tuple((spaces.Box(low=-5, high=5, shape=(7,)), # jug
+                                          spaces.Box(low=-5, high=5, shape=(7,)), # cup
+                                          spaces.Box(low=0, high=10350, shape=(3,)))) # number of particles in jug, cup and spilled
 
     self.simulation = Simulation(self.use_gui, self.output_directory, self.jug_start_position,
                                     self.cup_position)
 
-    self.reset()
-
   def step(self, action):
     # Execute one time step within the environment
-    movement_vector = action[0][:3]
+    """movement_vector = action[0][:3]
     movement_speed = action[0][3]
     normalized_movement = movement_vector / np.linalg.norm(movement_vector)
     position_change = normalized_movement * movement_speed
@@ -52,7 +52,10 @@ class PouringEnvBase(gym.Env):
     rotation_vector = action[1][:3]
     rotation_speed = action[1][3]
     normalized_rotation = rotation_vector / np.linalg.norm(rotation_vector)
-    rotation_change = normalized_rotation * rotation_speed
+    rotation_change = normalized_rotation * rotation_speed"""
+
+    position_change = action[0]
+    rotation_change = action[1]
 
     self.simulation.next_position = [position_change, rotation_change]
     self.simulation.base.timeStepNoGUI()
@@ -61,14 +64,23 @@ class PouringEnvBase(gym.Env):
     observation = self.__observe()
 
 
-    return observation, reward, self.done, {}
+    return observation, reward, self.terminated, self.truncated, {}
   
-  def __observe(self): #TODO
-    return None
+  def __observe(self):
+    jug_position = self.simulation.get_object_position(0)
+    cup_position = self.simulation.get_object_position(1)
 
-  def __reward(self):
     n_particles_cup = self.simulation.n_particles_cup
+    n_particles_jug = self.simulation.n_particles_jug
     n_particles_spilled = self.simulation.n_particles_spilled
+
+    return (jug_position, cup_position, [n_particles_jug, n_particles_cup, n_particles_spilled])
+
+  def __reward(self): # currently identical to base
+    n_particles_cup = self.simulation.n_particles_cup
+    print('Cup: ', n_particles_cup)
+    n_particles_spilled = self.simulation.n_particles_spilled
+    print('Spilled: ', n_particles_spilled)
 
     reward = n_particles_cup - self.spill_punish * n_particles_spilled
 
@@ -82,35 +94,19 @@ class PouringEnvBase(gym.Env):
     
     return reward
 
-  def reset(self):
+  def reset(self, options=None, seed=None):
     # Reset the state of the environment to an initial state
-    # TODO maybe cleanup if reset?
+    if self.simulation.is_initialized:
+      self.simulation.cleanup()
+    
+    self.simulation.init_simulation()
 
-    self.done = False
+    self.terminated = False
+    self.truncated = False
 
-    # clear the command queue
-
-    return self.jug_start_position #return initial state
+    return (self.__observe(), {})#self.jug_start_position #return initial state
     
   def render(self, mode='human', close=False):
     # Render the environment to the screen
     return NotImplementedError
-
-if __name__ == "__main__":
-  env = PouringEnvBase(use_gui=False)
-  #obs = env.reset(use_gui=True)
-
-  while True:
-      # Take a random action
-      action = env.action_space.sample()
-      print('Action: ', action)
-      obs, reward, done, info = env.step(action)
-      print('Observation space shape: ', env.observation_space.shape)
-      print('Reward: ', reward)
-      
-      
-      if done == True:
-          break
-
-  env.close()
 

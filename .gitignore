@@ -130,3 +130,5 @@ dmypy.json
 SimulationOutput/
 Cache/
 imgui.ini
+.vscode/launch.json
+.gitignore

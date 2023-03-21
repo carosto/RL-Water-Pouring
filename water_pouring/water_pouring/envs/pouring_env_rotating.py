@@ -1,11 +1,11 @@
-import gymnasium as gym
-from gymnasium import spaces
+import gym
+from gym import spaces
 
 import numpy as np
 
 from scipy.spatial.transform import Rotation as R
 
-from pouring_env_base import PouringEnvBase
+from water_pouring.envs.pouring_env_base import PouringEnvBase
 
 class PouringEnvRotating(PouringEnvBase):
   '''Custom Environment that follows gym interface'''
@@ -26,7 +26,8 @@ class PouringEnvRotating(PouringEnvBase):
     # observation space: position jug, position cup, particles
     self.observation_space = spaces.Tuple((spaces.Box(low=-5, high=5, shape=(7,)), # jug
                                           spaces.Box(low=-5, high=5, shape=(7,)), # cup
-                                          spaces.Box(low=0, high=350, shape=(3,)))) # number of particles in cup, jug and spilled
+                                          spaces.MultiDiscrete([10350] * 3))) # number of particles in jug, cup and spilled
+    self.observation_space = spaces.utils.flatten_space(self.observation_space)
 
   def step(self, action):
     # Execute one time step within the environment
@@ -43,10 +44,17 @@ class PouringEnvRotating(PouringEnvBase):
 
     return observation, reward, self.done, {}
   
-  def __observe(self): #TODO
-    return None
+  def __observe(self):
+    jug_position = self.simulation.get_object_position(0)
+    cup_position = self.simulation.get_object_position(1)
 
-  def __reward(self):
+    n_particles_cup = self.simulation.n_particles_cup
+    n_particles_jug = self.simulation.n_particles_jug
+    n_particles_spilled = self.simulation.n_particles_spilled
+
+    return (jug_position, cup_position, [n_particles_jug, n_particles_cup, n_particles_spilled])
+
+  def __reward(self): # currently identical to base
     n_particles_cup = self.simulation.n_particles_cup
     print('Cup: ', n_particles_cup)
     n_particles_spilled = self.simulation.n_particles_spilled
@@ -64,23 +72,11 @@ class PouringEnvRotating(PouringEnvBase):
     
     return reward
 
-  def reset(self):
-    # Reset the state of the environment to an initial state
-    # TODO maybe cleanup if reset?
-
-    self.done = False
-
-    # clear the command queue
-
-    return self.jug_start_position #return initial state
-    
-  def render(self, mode='human', close=False):
-    # Render the environment to the screen
-    return NotImplementedError
-
 if __name__ == "__main__":
   env = PouringEnvRotating(use_gui=False)
-  #obs = env.reset(use_gui=True)
+  obs = env.reset()
+
+  print("The initial observation is {}".format(obs))
 
   while True:
       # Take a random action
@@ -89,7 +85,8 @@ if __name__ == "__main__":
       obs, reward, done, info = env.step(action)
       print('Observation space shape: ', env.observation_space.shape)
       print('Reward: ', reward)
-      
+      print('Observation sample: ', env.observation_space.sample())
+      print("The new observation is {}".format(obs))
       
       if done == True:
           break
