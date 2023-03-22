@@ -1,5 +1,5 @@
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 
 import numpy as np
 
@@ -78,9 +78,9 @@ class PouringEnvBase(gym.Env):
 
   def __reward(self): # currently identical to base
     n_particles_cup = self.simulation.n_particles_cup
-    print('Cup: ', n_particles_cup)
+    #print('Cup: ', n_particles_cup)
     n_particles_spilled = self.simulation.n_particles_spilled
-    print('Spilled: ', n_particles_spilled)
+    #print('Spilled: ', n_particles_spilled)
 
     reward = n_particles_cup - self.spill_punish * n_particles_spilled
 

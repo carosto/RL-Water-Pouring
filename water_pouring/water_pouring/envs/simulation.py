@@ -252,8 +252,8 @@ class Simulation():
         #all particles within cup, jug and collector
         liq_ids_in_objs = liq_ids_jug + liq_ids_cup 
 
-        print('Number particles: ', fluid_model.numberOfParticles())
-        print('Particles in objects: ', len(liq_ids_in_objs))
+        #print('Number particles: ', fluid_model.numberOfParticles())
+        #print('Particles in objects: ', len(liq_ids_in_objs))
 
         self.n_particles_cup = len(liq_ids_cup)
         self.n_particles_jug = len(liq_ids_jug)

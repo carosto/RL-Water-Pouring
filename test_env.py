@@ -1,5 +1,5 @@
 from water_pouring.envs.pouring_env_rotating_wrapper import PouringEnvRotatingWrapper
-import gym
+import gymnasium as gym
 
 
 env = gym.make("WaterPouringEnvBase-v0")
