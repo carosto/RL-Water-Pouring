@@ -40,6 +40,9 @@ class Simulation():
         self.n_particles_cup = 0
         self.n_particles_jug = 0
         self.n_particles_spilled = 0
+        self.n_particles_pouring = 0
+
+        self.collision = False
 
         self.is_initialized = False
 
@@ -105,7 +108,7 @@ class Simulation():
         #scene.camPosition = [1, 2, 2.]
 
         fluid_init_pos = np.array(self.jug_start_position[:3])
-        fluid_init_pos_upper = fluid_init_pos + [0.07, 0.175, 0.07]
+        """fluid_init_pos_upper = fluid_init_pos + [0.07, 0.175, 0.07]
 
         scene.fluidBlocks.append(
                 Scenes.FluidBlock(
@@ -115,25 +118,27 @@ class Simulation():
                     mode=0,
                     initialVelocity=[0.0, 0.0, 0.0],
                 )
-            )
+            )"""
 
         base.initSimulation()
 
         sim = sph.Simulation.getCurrent()
-        
+
         sim.setValueInt(sim.BOUNDARY_HANDLING_METHOD, 0)
 
-        base.readFluidParticlesState('water_pouring/water_pouring/envs/LiquidParticles/beakernew_fluid_block_p006_v5.bgeo', sim.getFluidModel(0))
+        #base.readFluidParticlesState('water_pouring/water_pouring/envs/LiquidParticles/beakernew_fluid_block_p006_v5.bgeo', sim.getFluidModel(0))
             
         # move particles to the start position of the jug
         fluid_model = sim.getFluidModel(0)
 
-        for i in range(fluid_model.numberOfParticles()):
+        self._number_particles = fluid_model.getNumActiveParticles0()
+
+        for i in range(fluid_model.getNumActiveParticles0()):
             curr_pos = fluid_model.getPosition(i)
             fluid_model.setPosition(i, curr_pos + fluid_init_pos)
             fluid_model.setVelocity(i, [0.0, 0.0, 0.0])
             fluid_model.setAcceleration(i, [0.0, 0.0, 0.0])
-        
+
         self.base = base
         self.base.finishInitialization()
         self.is_initialized = True
@@ -185,9 +190,10 @@ class Simulation():
     def __get_liquid_inside_obj(self, fluid_model, cup_bounds, jug_bounds):
         ids_inside_cup = []
         ids_inside_jug = []
+        ids_spilled = []
         cup_x_bounds, cup_y_bounds, cup_z_bounds = self.__get_bounds(cup_bounds)
         jug_x_bounds, jug_y_bounds, jug_z_bounds = self.__get_bounds(jug_bounds)
-        for i in range(fluid_model.numberOfParticles()):
+        for i in range(fluid_model.getNumActiveParticles0()):
             p = fluid_model.getPosition(i)
             if p[0] > cup_x_bounds[0] and p[0] < cup_x_bounds[1]:
                 if p[1] > cup_y_bounds[0] and p[1] < cup_y_bounds[1]:
@@ -197,18 +203,30 @@ class Simulation():
                 if p[1] > jug_y_bounds[0] and p[1] < jug_y_bounds[1]:
                     if p[2] > jug_z_bounds[0] and p[2] < jug_z_bounds[1]:
                         ids_inside_jug.append(i)
+            if p[1] < cup_y_bounds[1] and i not in ids_inside_cup: # particles is spilled if it is below the cup
+                ids_spilled.append(i)
 
-        return len(ids_inside_cup), ids_inside_cup, len(ids_inside_jug), ids_inside_jug
+        return len(ids_inside_cup), ids_inside_cup, len(ids_inside_jug), ids_inside_jug, len(ids_spilled), ids_spilled
 
     def __transform_matrix_func(self, position, quat):
-            #construct matrix for transformation            
+        #construct matrix for transformation 
+        try:           
             rot = R.from_quat(quat)
-            body_matrix = np.zeros((4,4))
-            body_matrix[:3,:3] = rot.as_matrix()
-            body_matrix[:3,3] = position
-            body_matrix[3,3] = 1    
-            body_matrix = np.matrix(body_matrix)
-            return body_matrix
+        except:
+            print(quat)
+            sim = sph.Simulation.getCurrent()
+            boundary = sim.getBoundaryModel(0) 
+            animated_body = boundary.getRigidBodyObject()
+            print(animated_body.getPosition())
+            print(animated_body.getRotation())
+            print(self.next_position)
+            sys.exit()
+        body_matrix = np.zeros((4,4))
+        body_matrix[:3,:3] = rot.as_matrix()
+        body_matrix[:3,3] = position
+        body_matrix[3,3] = 1    
+        body_matrix = np.matrix(body_matrix)
+        return body_matrix
     
     def __count_particles(self):
         sim = sph.Simulation.getCurrent()
@@ -239,7 +257,7 @@ class Simulation():
         spilled_collector_bounds = self.__rotate_bounds(spilled_collector_bounds, spilled_collector_rotation)"""
         
         # collecting the particles in each area
-        liq_count_cup, liq_ids_cup, liq_count_jug, liq_ids_jug = self.__get_liquid_inside_obj(fluid_model, self.cup_bounds, jug_bounds)
+        liq_count_cup, liq_ids_cup, liq_count_jug, liq_ids_jug, ids_count_spilled, liq_ids_spilled = self.__get_liquid_inside_obj(fluid_model, self.cup_bounds, jug_bounds)
 
         self.particles_ids_jug = liq_ids_jug
         
@@ -257,8 +275,9 @@ class Simulation():
 
         self.n_particles_cup = len(liq_ids_cup)
         self.n_particles_jug = len(liq_ids_jug)
-        self.n_particles_spilled = fluid_model.numberOfParticles() - len(liq_ids_in_objs) # TODO change: flowing particles are currently counted as spilled
-    
+        self.n_particles_spilled = len(liq_ids_spilled) #fluid_model.numberOfParticles() - len(liq_ids_in_objs)
+        self.n_particles_pouring = fluid_model.getNumActiveParticles0() - self.n_particles_spilled - len(liq_ids_in_objs)
+
     def __check_collision(self):
         # transform the jug obj to the current pose and check for collisions with the cup obj
         sim = sph.Simulation.getCurrent()
@@ -287,3 +306,18 @@ class Simulation():
         rotation = animated_body.getRotation()
 
         return np.append(position, rotation)
+    
+    def get_particle_positions_velocities(self):
+        positions = []
+        sim = sph.Simulation.getCurrent()
+        fluid_model = sim.getFluidModel(0)
+        for i in range(fluid_model.getNumActiveParticles0()):
+            p = fluid_model.getPosition(i)
+            v = fluid_model.getVelocity(i)
+            #temp = [-100 if np.isnan(x) else x for x in np.append(p, v)] # remove nan values
+            positions.append(np.nan_to_num(np.append(p, v), nan=-1))
+            
+        return np.array(positions)
+
+    def get_number_of_particles(self):
+        return self._number_particles
