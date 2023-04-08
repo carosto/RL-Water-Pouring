@@ -26,5 +26,16 @@
             "viscosity": 0.0009,
             "viscosityMethod": 1
         }
+    ],
+    "FluidModels": [
+        {
+            "scale": [
+                1,
+                1,
+                1
+            ],
+            "id": "Fluid",
+            "particleFile": "LiquidParticles/beakernew_fluid_block_p006_v5.bgeo"
+        }
     ]
 }
