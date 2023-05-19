@@ -13,29 +13,32 @@ import numpy as np
 
 class Simulation():
 
-    def __init__(self, use_gui, output_directory, jug_start_position, cup_position):
+    def __init__(self, use_gui, output_directory, jug_start_position, cup_position, scene_file):
         self.use_gui = use_gui
         self.output_directory = output_directory
         self.jug_start_position = jug_start_position
         self.cup_position = cup_position
+        self.scene_file = scene_file
         
         self.particles_ids_cup = []
         self.particles_ids_jug = []
         self.collector_dict = []
 
         self.cup_name = 'wine_glass_test'
+        self.cup_path = os.path.join(os.path.dirname(__file__), f'ObjectFiles/{self.cup_name}.obj')
         self.jug_name = 'beakernew'
+        self.jug_path = os.path.join(os.path.dirname(__file__), f'ObjectFiles/{self.jug_name}.obj')
 
         # calculate the bounds of the cup (it does not move, so this only has to be done once)
-        self.cup_obj = pyvista.read(f"water_pouring/water_pouring/envs/ObjectFiles/{self.cup_name}.obj")
+        self.cup_obj = pyvista.read(self.cup_path)#f"../ObjectFiles/{self.cup_name}.obj")
         cup_position = self.cup_position[:3]
         cup_rotation = self.cup_position[3:]
 
         transformed_cup = self.cup_obj.transform(self.__transform_matrix_func(cup_position, cup_rotation), inplace=False)
         self.cup_bounds = transformed_cup.bounds
 
-        self.jug_obj = pyvista.read(f"water_pouring/water_pouring/envs/ObjectFiles/{self.jug_name}.obj")
-        self.spilled_collector_grid = pyvista.read("water_pouring/water_pouring/envs/ObjectFiles/UnitBox_open.obj")
+        self.jug_obj = pyvista.read(self.jug_path)#f"water_pouring/water_pouring/envs/ObjectFiles/{self.jug_name}.obj")
+        self.spilled_collector_grid = pyvista.read(os.path.join(os.path.dirname(__file__), 'ObjectFiles/UnitBox_open.obj'))#"water_pouring/water_pouring/envs/ObjectFiles/UnitBox_open.obj")
 
         self.n_particles_cup = 0
         self.n_particles_jug = 0
@@ -49,7 +52,7 @@ class Simulation():
     def init_simulation(self):
         base = sph.Exec.SimulatorBase()
         base.init(
-                useGui=self.use_gui, sceneFile=os.path.abspath('water_pouring/water_pouring/envs/scene.json'),
+                useGui=self.use_gui, sceneFile=os.path.abspath(os.path.join(os.path.dirname(__file__), self.scene_file)),#'water_pouring/water_pouring/envs/scene.json'),
                 stopAt=5,
                 outputDir= self.output_directory
             )
@@ -69,7 +72,7 @@ class Simulation():
         w = (vec / np.sin(theta/2)) if theta != 0 else 0
         scene.boundaryModels.append(
                 Scenes.BoundaryData(
-                    meshFile=f'ObjectFiles/{jug_file}',
+                    meshFile=self.jug_path,#f'ObjectFiles/{jug_file}',
                     translation=self.jug_start_position[:3],
                     scale=[1, 1, 1],
                     color=[0.5, 0.5, 0.5, 1.0],
@@ -92,7 +95,7 @@ class Simulation():
         w = (vec / np.sin(theta/2)) if theta != 0 else 0
         scene.boundaryModels.append(
                 Scenes.BoundaryData(
-                    meshFile=f'ObjectFiles/{cup_file}',
+                    meshFile=self.cup_path,#f'ObjectFiles/{cup_file}',
                     translation=self.cup_position[:3],
                     scale=[1, 1, 1],
                     color=[0.5, 0.5, 0.5, 1.0],
@@ -133,9 +136,11 @@ class Simulation():
 
         self._number_particles = fluid_model.getNumActiveParticles0()
 
+        self.time_step_size = sph.TimeManager.getCurrent().getTimeStepSize()
+
         for i in range(fluid_model.getNumActiveParticles0()):
             curr_pos = fluid_model.getPosition(i)
-            fluid_model.setPosition(i, curr_pos + fluid_init_pos)
+            #fluid_model.setPosition(i, curr_pos + fluid_init_pos) 
             fluid_model.setVelocity(i, [0.0, 0.0, 0.0])
             fluid_model.setAcceleration(i, [0.0, 0.0, 0.0])
 
@@ -303,21 +308,52 @@ class Simulation():
         boundary = sim.getBoundaryModel(object_number) 
         animated_body = boundary.getRigidBodyObject()
         position = animated_body.getPosition()
+        position = self.change_of_coordinates(self.cup_position, position)
         rotation = animated_body.getRotation()
 
         return np.append(position, rotation)
     
     def get_particle_positions_velocities(self):
-        positions = []
         sim = sph.Simulation.getCurrent()
         fluid_model = sim.getFluidModel(0)
+        positions = np.zeros((fluid_model.getNumActiveParticles0(), 6))
         for i in range(fluid_model.getNumActiveParticles0()):
+            # make sure the particles are always ordered by ids
+            id = fluid_model.getParticleId(i)
             p = fluid_model.getPosition(i)
+            p = self.change_of_coordinates(self.cup_position, p)
             v = fluid_model.getVelocity(i)
             #temp = [-100 if np.isnan(x) else x for x in np.append(p, v)] # remove nan values
-            positions.append(np.nan_to_num(np.append(p, v), nan=-1))
-            
-        return np.array(positions)
+            #positions.append(np.nan_to_num(np.append(p, v), nan=-1))
+            positions[id] = np.nan_to_num(np.append(p,v), nan=-1)
+        return positions
+    
+    def get_particle_accelerations(self):
+        sim = sph.Simulation.getCurrent()
+        fluid_model = sim.getFluidModel(0)
+        accelerations = np.zeros((fluid_model.getNumActiveParticles0(), 3))
+        for i in range(fluid_model.getNumActiveParticles0()):
+            id = fluid_model.getParticleId(i)
+            accelerations[id] = fluid_model.getAcceleration(i)
+        return accelerations
 
     def get_number_of_particles(self):
         return self._number_particles
+
+    def save_particles(self):
+        self.base.writeFluidParticlesState("beakernew_fluid_block_rotated.bgeo", sph.Simulation.getCurrent().getFluidModel(0))
+        print('saved')
+    
+    def change_of_coordinates(self, base, positions):
+        pos = base[:3]
+        rot = base[3:]
+        body_matrix = self.__transform_matrix_func(pos, rot)
+
+        def coordinates_changeRefFrame(pt, body_matrix):
+            point = np.copy(pt)
+            body_matrix_inverse = body_matrix.I
+            coords = body_matrix_inverse.dot(np.append(point, [1])).A1[0:3]
+            return coords 
+
+        postions_new = coordinates_changeRefFrame(positions, body_matrix)
+        return postions_new
