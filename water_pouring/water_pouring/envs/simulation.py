@@ -140,7 +140,7 @@ class Simulation():
 
         for i in range(fluid_model.getNumActiveParticles0()):
             curr_pos = fluid_model.getPosition(i)
-            #fluid_model.setPosition(i, curr_pos + fluid_init_pos) 
+            fluid_model.setPosition(i, curr_pos + fluid_init_pos) 
             fluid_model.setVelocity(i, [0.0, 0.0, 0.0])
             fluid_model.setAcceleration(i, [0.0, 0.0, 0.0])
 

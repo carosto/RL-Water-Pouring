@@ -13,8 +13,8 @@
         ],
         "cflMethod": 0,
         "cflFactor": 0.5,
-        "enableVTKExport": false,
-        "enableRigidBodyVTKExport": false,
+        "enableVTKExport": true,
+        "enableRigidBodyVTKExport": true,
         "dataExportFPS": 120
     },
     "Materials": [
