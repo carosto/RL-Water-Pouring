@@ -12,7 +12,7 @@ class PouringEnvBase(gym.Env):
   '''Custom Environment that follows gym interface'''
   metadata = {'render_modes': ['human']}
 
-  def __init__(self, use_gui=False, spill_punish=0.1, hit_reward=0.1, jerk_punish=0.1, particle_explosion_punish=0.1, max_timesteps=500, jug_start_position=None, scene_file="scene.json"):
+  def __init__(self, use_gui=False, spill_punish=0.1, hit_reward=0.1, jerk_punish=0.1, particle_explosion_punish=0.1, max_timesteps=500, jug_start_position=None, scene_file="scene.json", output_directory="SimulationOutput"):
 
     self.cup_position = [0, 0, 0] 
     cup_rotation = R.from_euler('XYZ', [-90, 0, 0], degrees=True)
@@ -25,7 +25,7 @@ class PouringEnvBase(gym.Env):
     else:
       self.jug_start_position = jug_start_position
 
-    self.output_directory = '../SimulationOutput'
+    self.output_directory = f'../{output_directory}'
 
     self.use_gui = use_gui
 
@@ -35,8 +35,11 @@ class PouringEnvBase(gym.Env):
     self.hit_reward = hit_reward # factor to reward particles in the cup
     self.jerk_punish = jerk_punish # factor to punish jerky movements
     self.particle_explosion_punish = particle_explosion_punish # factor to punish exploding particles (high acceleration)
+    self.time_step_punish = 1
 
     self.max_timesteps = max_timesteps
+
+    self.max_spilled_particles = 20
 
     self.simulation = Simulation(self.use_gui, self.output_directory, self.jug_start_position,
                                     self.cup_position, self.scene_file)
@@ -60,7 +63,9 @@ class PouringEnvBase(gym.Env):
                                           spaces.Box(low=-1, high=1, shape=(350, 6)), # position and velocity of particles
                                           ))#spaces.Box(low=0, high=self.max_timesteps, shape=(1,), dtype=np.float64))) 
     #self.observation_space = spaces.utils.flatten_space(self.observation_space)
-    # TODO jerk punish?
+
+    self.last_hit_reward_results = 0
+    self.last_spill_punish_results = 0
 
   def seed(self,seed):
         """
@@ -114,6 +119,11 @@ class PouringEnvBase(gym.Env):
     # done when all particles have poured out
     if self.simulation.n_particles_jug == 0 and self.simulation.n_particles_pouring == 0:
       print('Poured all particles')
+      self.terminated = True
+
+    # done if too many particles have been spilled
+    if self.simulation.n_particles_spilled >= self.max_spilled_particles:
+      print("Too many particles spilled")
       self.terminated = True
     
     return observation, reward, self.terminated, self.truncated, {}
@@ -182,8 +192,12 @@ class PouringEnvBase(gym.Env):
 
     # jerk for rotation 
     #jerk_rotation = np.linalg.norm(self.approx_3rd_derivative(current_rotation, last_rotations, self.simulation.time_step_size))
+    # TODO taken from yannik, check! (reward of previous step is taken into account)
+    hit_reward_result = self.hit_reward * n_particles_cup
 
-    reward = self.hit_reward * n_particles_cup - self.spill_punish * n_particles_spilled - self.jerk_punish * jerk #- self.particle_explosion_punish * average_acceleration#(jerk_position + jerk_rotation)
+    spill_punish_result = self.spill_punish * n_particles_spilled
+
+    reward = (hit_reward_result - self.last_hit_reward_results) - (spill_punish_result - self.last_spill_punish_results) - self.jerk_punish * jerk - self.time_step_punish#- self.particle_explosion_punish * average_acceleration#(jerk_position + jerk_rotation)
 
     if np.isnan(reward):
       print(n_particles_cup)
@@ -200,6 +214,9 @@ class PouringEnvBase(gym.Env):
       print("collision")
       reward -= 1000
     
+    self.last_hit_reward_results = hit_reward_result
+    self.last_spill_punish_results = spill_punish_result
+
     return reward
 
   def reset(self, options=None, seed=None):
