@@ -1,0 +1,41 @@
+{
+    "Configuration": {
+        "pause": true,
+        "timeStepSize": 0.004167,
+        "density0": 1000,
+        "particleRadius": 0.006,
+        "simulationMethod": 4,
+        "boundaryHandlingMethod": 2,
+        "gravitation": [
+            0,
+            -9.81,
+            0
+        ],
+        "cflMethod": 0,
+        "cflFactor": 0.5,
+        "enableVTKExport": true,
+        "enableRigidBodyVTKExport": true,
+        "dataExportFPS": 120
+    },
+    "Materials": [
+        {
+            "id": "Fluid",
+            "density0": 1000,
+            "surfaceTension": 0.17,
+            "surfaceTensionMethod": 2,
+            "viscosity": 0.0009,
+            "viscosityMethod": 1
+        }
+    ],
+    "FluidModels": [
+        {
+            "scale": [
+                1,
+                1,
+                1
+            ],
+            "id": "Fluid",
+            "particleFile": "LiquidParticles/beakernew_fluid_block_rotated_130.bgeo"
+        }
+    ]
+}
