@@ -5,7 +5,7 @@
         "density0": 1000,
         "particleRadius": 0.006,
         "simulationMethod": 4,
-        "boundaryHandlingMethod": 2,
+        "boundaryHandlingMethod": 0,
         "gravitation": [
             0,
             -9.81,

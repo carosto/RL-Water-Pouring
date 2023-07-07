@@ -3,6 +3,7 @@ import os
 import pysplishsplash as sph
 import pyvista
 import vtk
+
 import pysplishsplash.Utilities.SceneLoaderStructs as Scenes
 
 vtk.vtkLogger.SetStderrVerbosity(vtk.vtkLogger.VERBOSITY_OFF)# TODO check vtkMath::Jacobi warning for collision check
@@ -126,8 +127,7 @@ class Simulation():
         base.initSimulation()
 
         sim = sph.Simulation.getCurrent()
-
-        sim.setValueInt(sim.BOUNDARY_HANDLING_METHOD, 0)
+        #sim.setValueInt(sim.BOUNDARY_HANDLING_METHOD, 0)
 
         #base.readFluidParticlesState('water_pouring/water_pouring/envs/LiquidParticles/beakernew_fluid_block_p006_v5.bgeo', sim.getFluidModel(0))
             
@@ -152,6 +152,17 @@ class Simulation():
         self.base.cleanup()
         self.base = None
         self.is_initialized = False
+
+        self.n_particles_cup = 0
+        self.n_particles_jug = 0
+        self.n_particles_spilled = 0
+        self.n_particles_pouring = 0
+
+        self.collision = False
+
+        self.particles_ids_cup = []
+        self.particles_ids_jug = []
+        self.collector_dict = []
 
     def __time_step_callback(self):  
         sim = sph.Simulation.getCurrent()
@@ -208,7 +219,7 @@ class Simulation():
                 if p[1] > jug_y_bounds[0] and p[1] < jug_y_bounds[1]:
                     if p[2] > jug_z_bounds[0] and p[2] < jug_z_bounds[1]:
                         ids_inside_jug.append(i)
-            if p[1] < cup_y_bounds[1] and i not in ids_inside_cup: # particles is spilled if it is below the cup
+            if p[1] < cup_y_bounds[1] and i not in ids_inside_cup and i not in ids_inside_jug: # particles is spilled if it is below the cup
                 ids_spilled.append(i)
 
         return len(ids_inside_cup), ids_inside_cup, len(ids_inside_jug), ids_inside_jug, len(ids_spilled), ids_spilled
@@ -283,6 +294,8 @@ class Simulation():
         self.n_particles_spilled = len(liq_ids_spilled) #fluid_model.numberOfParticles() - len(liq_ids_in_objs)
         self.n_particles_pouring = fluid_model.getNumActiveParticles0() - self.n_particles_spilled - len(liq_ids_in_objs)
 
+        #print('Cup: ', self.n_particles_cup, ' Jug: ', self.n_particles_jug, ' Spilled: ', self.n_particles_spilled, ' Pouring: ', self.n_particles_pouring)
+
     def __check_collision(self):
         # transform the jug obj to the current pose and check for collisions with the cup obj
         sim = sph.Simulation.getCurrent()
@@ -291,9 +304,14 @@ class Simulation():
         jug_position = animated_body.getPosition()
         jug_rotation = animated_body.getRotation()
 
-        transformed_jug = self.jug_obj.transform(self.__transform_matrix_func(jug_position, jug_rotation), inplace=False)
+        boundary = sim.getBoundaryModel(1) 
+        animated_body = boundary.getRigidBodyObject()
+        cup_position = animated_body.getPosition()
+        cup_rotation = animated_body.getRotation()
 
-        _, n_collisions = self.cup_obj.collision(transformed_jug, contact_mode=1)
+        transformed_jug = self.jug_obj.transform(self.__transform_matrix_func(jug_position, jug_rotation), inplace=False)
+        transformed_cup = self.cup_obj.transform(self.__transform_matrix_func(cup_position, cup_rotation), inplace=False)
+        _, n_collisions = transformed_cup.collision(transformed_jug, contact_mode=1)#self.cup_obj.collision(transformed_jug, contact_mode=1)
         
         if n_collisions > 0:
             self.collision = True
