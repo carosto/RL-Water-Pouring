@@ -369,7 +369,8 @@ class Simulation:
     def get_particle_positions_velocities(self):
         sim = sph.Simulation.getCurrent()
         fluid_model = sim.getFluidModel(0)
-        positions = np.zeros((fluid_model.getNumActiveParticles0(), 6))
+        positions = np.zeros((fluid_model.getNumActiveParticles0(), 3))
+        velocities = np.zeros((fluid_model.getNumActiveParticles0(), 3))
         for i in range(fluid_model.getNumActiveParticles0()):
             # make sure the particles are always ordered by ids
             id = fluid_model.getParticleId(i)
@@ -378,8 +379,9 @@ class Simulation:
             v = fluid_model.getVelocity(i)
             # temp = [-100 if np.isnan(x) else x for x in np.append(p, v)] # remove nan values
             # positions.append(np.nan_to_num(np.append(p, v), nan=-1))
-            positions[id] = np.nan_to_num(np.append(p, v), nan=-1)
-        return positions
+            positions[id] = np.nan_to_num(p, nan=-100)
+            velocities[id] = np.nan_to_num(v, nan=-100)
+        return positions, velocities
 
     def get_particle_accelerations(self):
         sim = sph.Simulation.getCurrent()

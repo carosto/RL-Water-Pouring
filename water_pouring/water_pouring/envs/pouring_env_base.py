@@ -30,6 +30,13 @@ class PouringEnvBase(gym.Env):
         cup_rotation = R.from_euler("XYZ", [-90, 0, 0], degrees=True)
         self.cup_position.extend(cup_rotation.as_quat())
 
+        self.jug_upright_rotation = R.from_euler("XYZ", [90, 180, 0], degrees=True).as_euler("XYZ", degrees=True)
+        self.jug_upright_rotation_internal = np.array(
+            [0, 0, 0]
+        )  # rotation at which the jug is upright (needed as reference for rotation normalization)
+        self.initial_position_internal = self.jug_upright_rotation_internal.copy()
+        self.current_rotation_internal = self.initial_position_internal.copy()
+
         if jug_start_position is None:
             self.jug_start_position = [0.5, 0, 0.5]
             jug_start_rotation = R.from_euler("XYZ", [90, 180, 0], degrees=True)
@@ -61,17 +68,17 @@ class PouringEnvBase(gym.Env):
 
         self.time_step = 0
 
-        self.movement_bounds = ((-0.5, 0.5), (0, 0.5), (-0.5, 0.5))
+        self.movement_bounds = [-0.5, 0.5]  # ((-0.5, 0.5), (0, 0.5), (-0.5, 0.5))
 
-        self.max_rotation = 180
+        self.rotation_bounds = [-180, 180]
 
-        self.min_rotation = 0
+        self.particle_bounds = [self.movement_bounds[0] - 1, self.movement_bounds[1] + 1]
 
-        self.last_poses = [
+        """self.last_poses = [
             self.jug_start_position,
             self.jug_start_position,
             self.jug_start_position,
-        ]  # required for calculation of jerk
+        ]  # required for calculation of jerk"""
 
         # Define action and observation space
         # They must be gym.spaces objects
@@ -82,8 +89,8 @@ class PouringEnvBase(gym.Env):
         self.observation_space = spaces.Tuple(
             (
                 spaces.Box(
-                    low=np.array([-10, -10, -10, -360, -360, -360]),
-                    high=np.array([10, 10, 10, 360, 360, 360]),
+                    low=-1,
+                    high=1,
                     shape=(6,),
                     dtype=np.float64,
                 ),  # jug
@@ -115,6 +122,8 @@ class PouringEnvBase(gym.Env):
         position_change = action[0]
         rotation_change = action[1]
 
+        self.current_rotation_internal += np.array(rotation_change)
+
         step_position_change = np.array(position_change) / self.steps_per_action
         step_rotation_change = np.array(rotation_change) / self.steps_per_action
 
@@ -138,27 +147,19 @@ class PouringEnvBase(gym.Env):
             self.terminated = True
 
         # check if jug was moved outside the bounds
-        jug_position = self.simulation.get_object_position(0)
-        pos = jug_position[:3]
-        if (
-            not (self.movement_bounds[0][0] <= pos[0] <= self.movement_bounds[0][1])
-            or not (self.movement_bounds[1][0] <= pos[1] <= self.movement_bounds[1][1])
-            or not (self.movement_bounds[2][0] <= pos[2] <= self.movement_bounds[2][1])
-        ):
+        obs_position = observation[0][:3]
+        if any(abs(x) >= 1 for x in obs_position):
             print("Out of movement bounds")
             self.terminated = True
 
-        self.last_poses.pop(0)  # remove the oldest position, keep the list always at length 3
-        self.last_poses.append(jug_position)
+        """self.last_poses.pop(0)  # remove the oldest position, keep the list always at length 3
+        self.last_poses.append(jug_position)"""
 
         # check if jug was rotated outside the bounds
-        """rot = R.from_quat(jug_position[3:]).as_euler('XYZ', degrees=True)
-    start_rot = R.from_quat(self.jug_start_position[3:]).as_euler('XYZ', degrees=True)
-    rot_diff = rot - start_rot
-    print([round(x,2) for x in rot_diff])
-    if any(abs(x) > self.max_rotation for x in rot_diff):# any(x > self.max_rotation or x < self.min_rotation for x in rot_diff): # TODO check!!!!
-      print('Out of rotation bounds')
-      self.terminated = True"""
+        obs_rotation = observation[0][3:]
+        if any(abs(x) >= 1 for x in obs_rotation):
+            print("Out of rotation bounds")
+            self.terminated = True
 
         # done when all particles have poured out
         if self.simulation.n_particles_jug == 0 and self.simulation.n_particles_pouring == 0:
@@ -175,29 +176,21 @@ class PouringEnvBase(gym.Env):
     def __observe(self):
         jug_position = self.simulation.get_object_position(0)
 
-        jug_pos = list(jug_position[:3])
-        jug_rot = R.from_quat(jug_position[3:]).as_euler("XYZ", degrees=True)
+        # normalize the jug position and rotation for the observation
+        pos = jug_position[:3]
+        normalized_position = list(np.interp(pos, self.movement_bounds, [-1, 1]))
 
-        jug_pos.extend(jug_rot)
+        rot_diff = self.current_rotation_internal - self.jug_upright_rotation_internal
+        normalized_rotation = np.interp(rot_diff, self.rotation_bounds, [-1, 1])
 
-        """# normalize the jug position for the observation
-    pos = jug_position[:3]
+        normalized_position.extend(normalized_rotation)
 
-    normalized_x = (pos[0] - self.movement_bounds[0][0]) / (self.movement_bounds[0][1] - self.movement_bounds[0][0])
-    normalized_y = (pos[1] - self.movement_bounds[1][0]) / (self.movement_bounds[1][1] - self.movement_bounds[1][0])
-    normalized_z = (pos[2] - self.movement_bounds[2][0]) / (self.movement_bounds[2][1] - self.movement_bounds[2][0])
-    normalized_position = [normalized_x, normalized_y, normalized_z]
+        # normalize the particle positions and velocities
+        particle_positions, particle_velocities = self.simulation.get_particle_positions_velocities()
+        normalized_particle_positions = np.interp(particle_positions, self.particle_bounds, [-1, 1])
+        particle_velocities_clipped = np.clip(particle_velocities, -1, 1)  # normalize particle velocities
 
-    rot = R.from_quat(jug_position[3:]).as_euler('XYZ', degrees=True)
-    start_rot = R.from_quat(self.jug_start_position[3:]).as_euler('XYZ', degrees=True)
-    rot_diff = rot - start_rot
-    normalized_rotation = (rot_diff - self.min_rotation) / (self.max_rotation - self.min_rotation)
-    #TODO test for different rotations
-
-    normalized_position.extend(normalized_rotation)"""
-
-        particle_positions = self.simulation.get_particle_positions_velocities()
-        particle_positions_clipped = np.clip(particle_positions, -1, 1)  # normalize particle positions
+        normalized_particle_data = np.concatenate([normalized_particle_positions, particle_velocities_clipped], axis=1)
 
         time_step = self.time_step / self.max_timesteps
 
@@ -206,8 +199,8 @@ class PouringEnvBase(gym.Env):
         # observation = [jug_position, cup_position, [n_particles_jug, n_particles_cup, n_particles_spilled, n_particles_pouring]]
         # observation = [jug_position, particle_positions, time_step]
 
-        # observation = (np.array(normalized_position), particle_positions_clipped)#, np.array([time_step]))
-        observation = (np.array(jug_pos), particle_positions_clipped)
+        observation = (np.array(normalized_position), normalized_particle_data)  # , np.array([time_step]))
+        # observation = (np.array(jug_pos), particle_positions_clipped)
         return observation
 
     def __reward(self):  # currently identical to base
@@ -223,8 +216,8 @@ class PouringEnvBase(gym.Env):
         current_position = current_pose[:3]
         current_rotation = R.from_quat(current_pose[3:]).as_euler("XYZ", degrees=True)
 
-        last_positions = [x[:3] for x in self.last_poses]
-        last_rotations = [R.from_quat(x[3:]).as_euler("XYZ", degrees=True) for x in self.last_poses]
+        """last_positions = [x[:3] for x in self.last_poses]
+        last_rotations = [R.from_quat(x[3:]).as_euler("XYZ", degrees=True) for x in self.last_poses]"""
 
         # penalize high acceration for particles (-> exploding)
         particle_accelerations = self.simulation.get_particle_accelerations()
@@ -268,8 +261,7 @@ class PouringEnvBase(gym.Env):
 
         self.last_hit_reward_results = hit_reward_result
         self.last_spill_punish_results = spill_punish_result
-
-        return reward[0]
+        return reward
 
     def reset(self, options=None, seed=None):
         # Reset the state of the environment to an initial state
@@ -278,11 +270,11 @@ class PouringEnvBase(gym.Env):
 
         self.simulation.init_simulation()
         self.max_particles = self.simulation.get_number_of_particles()
-        self.last_poses = [
+        """self.last_poses = [
             self.jug_start_position,
             self.jug_start_position,
             self.jug_start_position,
-        ]  # required for calculation of jerk
+        ]  # required for calculation of jerk"""
         self.time_step = 0
 
         self.last_hit_reward_results = 0
@@ -290,6 +282,8 @@ class PouringEnvBase(gym.Env):
 
         self.terminated = False
         self.truncated = False
+
+        self.current_rotation_internal = self.initial_position_internal
 
         return (self.__observe(), {})
 
@@ -312,6 +306,10 @@ class PouringEnvBase(gym.Env):
 
     def change_start_position(self, new_position):
         self.jug_start_position = new_position
+
+        rot = R.from_quat(new_position[3:]).as_euler("XYZ", degrees=True)
+        diff = rot - self.jug_upright_rotation
+        self.initial_position_internal = self.jug_upright_rotation_internal + diff
 
     def render(self, mode="human", close=False):
         # Render the environment to the screen
