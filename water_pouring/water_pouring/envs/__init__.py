@@ -1,3 +1,2 @@
 from water_pouring.envs.pouring_env_base import PouringEnvBase
-from water_pouring.envs.pouring_env_rotating import PouringEnvRotating
 from water_pouring.envs.pouring_env_x_rotation_wrapper import XRotationWrapper
