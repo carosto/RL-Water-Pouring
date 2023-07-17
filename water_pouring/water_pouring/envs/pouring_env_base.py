@@ -283,7 +283,7 @@ class PouringEnvBase(gym.Env):
         self.terminated = False
         self.truncated = False
 
-        self.current_rotation_internal = self.initial_position_internal
+        self.current_rotation_internal = self.initial_position_internal.copy()
 
         return (self.__observe(), {})
 
