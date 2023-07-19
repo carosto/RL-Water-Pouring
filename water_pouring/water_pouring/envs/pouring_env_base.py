@@ -72,7 +72,7 @@ class PouringEnvBase(gym.Env):
 
         self.rotation_bounds = [-180, 180]
 
-        self.particle_bounds = [self.movement_bounds[0] - 1, self.movement_bounds[1] + 1]
+        self.particle_bounds = [self.movement_bounds[0] - 0.1, self.movement_bounds[1] + 0.1]
 
         """self.last_poses = [
             self.jug_start_position,
@@ -187,6 +187,15 @@ class PouringEnvBase(gym.Env):
 
         # normalize the particle positions and velocities
         particle_positions, particle_velocities = self.simulation.get_particle_positions_velocities()
+
+        # sort the particles by euclidian distance to fixed point (corner of the particle boundary)
+        reference_point = [self.particle_bounds[0], self.particle_bounds[0], self.particle_bounds[0]]
+        distances = [np.linalg.norm(p - reference_point) for p in particle_positions]
+        sorted_indices = np.argsort(distances)
+
+        particle_positions = particle_positions[sorted_indices]
+        particle_velocities = particle_velocities[sorted_indices]
+
         normalized_particle_positions = np.interp(particle_positions, self.particle_bounds, [-1, 1])
         particle_velocities_clipped = np.clip(particle_velocities, -1, 1)  # normalize particle velocities
 
