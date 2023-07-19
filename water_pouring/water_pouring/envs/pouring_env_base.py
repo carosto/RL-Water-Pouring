@@ -60,7 +60,7 @@ class PouringEnvBase(gym.Env):
 
         self.max_timesteps = max_timesteps
 
-        self.max_spilled_particles = 20
+        self.max_spilled_particles = 100
 
         self.simulation = Simulation(
             self.use_gui, self.output_directory, self.jug_start_position, self.cup_position, self.scene_file
