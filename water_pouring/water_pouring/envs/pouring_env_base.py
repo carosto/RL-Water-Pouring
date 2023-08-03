@@ -57,11 +57,11 @@ class PouringEnvBase(gym.Env):
         self.particle_explosion_punish = (
             particle_explosion_punish  # factor to punish exploding particles (high acceleration)
         )
-        self.time_step_punish = 1
+        self.time_step_punish = 0.1
 
         self.max_timesteps = max_timesteps
 
-        self.max_spilled_particles = 20#100
+        self.max_spilled_particles = 350#100
 
         if use_fill_limit:
             self.max_fill = 150 # max amount of particles to fill in the cup
@@ -263,7 +263,7 @@ class PouringEnvBase(gym.Env):
 
         # jerk for position
         # jerk_position = np.linalg.norm(self.approx_3rd_derivative(current_position, last_positions, self.simulation.time_step_size))
-        jerk = np.linalg.norm(self.last_action) ** 2  # [0]**2
+        jerk = np.linalg.norm(self.last_action)  # [0]**2
 
         # jerk for rotation
         # jerk_rotation = np.linalg.norm(self.approx_3rd_derivative(current_rotation, last_rotations, self.simulation.time_step_size))
@@ -276,11 +276,16 @@ class PouringEnvBase(gym.Env):
 
         spill_punish_result = self.spill_punish * (n_particles_spilled - self.last_particles_spilled)
 
-        reward = (
+        """reward = (
             hit_reward_result - spill_punish_result - self.jerk_punish * jerk
-        ) - self.time_step_punish  # - self.particle_explosion_punish * average_acceleration#(jerk_position + jerk_rotation)
+        ) - self.time_step_punish  # - self.particle_explosion_punish * average_acceleration#(jerk_position + jerk_rotation)"""
 
+        reward = self.hit_reward * (n_particles_cup/self.max_particles) - self.spill_punish * (n_particles_spilled/self.max_particles) - self.jerk_punish * jerk - self.time_step_punish
+
+        """max_reward = self.hit_reward * self.max_particles
+        min_reward = self.spill_punish * self.max_particles + self.jerk_punish * np.linalg.norm(self.action_space[0].high) ** 2 + self.jerk_punish * np.linalg.norm(self.action_space[1].high) ** 2
         # reward = hit_reward_result - spill_punish_result - self.jerk_punish * jerk - self.time_step_punish
+        normalized_reward = np.interp(reward, [-min_reward, max_reward], [-1, 1])"""
 
         if np.isnan(reward):
             print(n_particles_cup)
