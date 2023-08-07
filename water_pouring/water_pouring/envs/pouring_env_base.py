@@ -80,11 +80,7 @@ class PouringEnvBase(gym.Env):
 
         self.particle_bounds = [self.movement_bounds[0] - 0.1, self.movement_bounds[1] + 0.1]
 
-        """self.last_poses = [
-            self.jug_start_position,
-            self.jug_start_position,
-            self.jug_start_position,
-        ]  # required for calculation of jerk"""
+        self.last_actions = [[[0,0,0], [0,0,0]], [[0,0,0], [0, 0, 0]], [[0,0,0],[0, 0, 0]]] # required for calculation of jerk
 
         # Define action and observation space
         # They must be gym.spaces objects
@@ -114,6 +110,8 @@ class PouringEnvBase(gym.Env):
 
         self.steps_per_action = 1
 
+        self.max_jerk = 200000 #500000 (for full action space)
+
     def seed(self, seed):
         """
         Seeding might not work perfectly for this environment
@@ -127,12 +125,15 @@ class PouringEnvBase(gym.Env):
 
     def step(self, action):
         # Execute one time step within the environment
-        self.last_action = action
+
+        # add the current action to the list and remove the oldest one (length always kept at 3)
+        self.last_actions.insert(0, action)
+        self.last_actions.pop()
 
         position_change = action[0]
         rotation_change = action[1]
 
-        old_rotation_cup = R.from_quat(self.simulation.get_object_position(0)[3:]).as_euler("XYZ", degrees=True)
+        old_rotation_jug = R.from_quat(self.simulation.get_object_position(0)[3:]).as_euler("XYZ", degrees=True)
 
         step_position_change = np.array(position_change) / self.steps_per_action
         step_rotation_change = np.array(rotation_change) / self.steps_per_action
@@ -142,9 +143,9 @@ class PouringEnvBase(gym.Env):
 
             self.simulation.base.timeStepNoGUI()
         
-        new_rotation_cup = R.from_quat(self.simulation.get_object_position(0)[3:]).as_euler("XYZ", degrees=True)
+        new_rotation_jug = R.from_quat(self.simulation.get_object_position(0)[3:]).as_euler("XYZ", degrees=True)
 
-        if not np.array_equal(old_rotation_cup, new_rotation_cup):
+        if not np.array_equal(old_rotation_jug, new_rotation_jug):
             self.current_rotation_internal += np.array(rotation_change)
 
         # self.simulation.next_position = [position_change, rotation_change]
@@ -166,9 +167,6 @@ class PouringEnvBase(gym.Env):
         if any(abs(x) >= 1 for x in obs_position):
             print("Out of movement bounds")
             self.terminated = True
-
-        """self.last_poses.pop(0)  # remove the oldest position, keep the list always at length 3
-        self.last_poses.append(jug_position)"""
 
         # check if jug was rotated outside the bounds
         obs_rotation = observation[0][3:]
@@ -240,33 +238,18 @@ class PouringEnvBase(gym.Env):
         # observation = (np.array(jug_pos), particle_positions_clipped)
         return observation
 
-    def __reward(self):  # currently identical to base
+    def __reward(self):
         n_particles_cup = self.simulation.n_particles_cup
-        # print('Cup: ', n_particles_cup)
-        # print('Jug: ', self.simulation.n_particles_jug)
         n_particles_spilled = self.simulation.n_particles_spilled
-        # print('Spilled: ', n_particles_spilled)
-        # print('Pouring: ', self.simulation.n_particles_pouring)
-
-        # calculate jerk
-        current_pose = self.simulation.get_object_position(0)
-        current_position = current_pose[:3]
-        current_rotation = R.from_quat(current_pose[3:]).as_euler("XYZ", degrees=True)
-
-        """last_positions = [x[:3] for x in self.last_poses]
-        last_rotations = [R.from_quat(x[3:]).as_euler("XYZ", degrees=True) for x in self.last_poses]"""
 
         # penalize high acceration for particles (-> exploding)
         particle_accelerations = self.simulation.get_particle_accelerations()
         acceleration_magnitudes = np.linalg.norm(particle_accelerations, axis=1)
         average_acceleration = np.mean(acceleration_magnitudes)
 
-        # jerk for position
-        # jerk_position = np.linalg.norm(self.approx_3rd_derivative(current_position, last_positions, self.simulation.time_step_size))
-        jerk = np.linalg.norm(self.last_action)  # [0]**2
+        # calculate jerk
+        jerk = self.calculate_jerk(self.last_actions)
 
-        # jerk for rotation
-        # jerk_rotation = np.linalg.norm(self.approx_3rd_derivative(current_rotation, last_rotations, self.simulation.time_step_size))
         # TODO taken from yannik, check! (reward of previous step is taken into account)
         # reward: only newly spilled/hit particles are counted
         if self.simulation.n_particles_cup <= self.max_fill:
@@ -313,11 +296,8 @@ class PouringEnvBase(gym.Env):
 
         self.simulation.init_simulation()
         self.max_particles = self.simulation.get_number_of_particles()
-        """self.last_poses = [
-            self.jug_start_position,
-            self.jug_start_position,
-            self.jug_start_position,
-        ]  # required for calculation of jerk"""
+        self.last_actions = [[[0,0,0], [0,0,0]], [[0,0,0], [0, 0, 0]], [[0,0,0],[0, 0, 0]]] # required for calculation of jerk
+
         self.time_step = 0
 
         self.last_particles_cup = 0
@@ -330,22 +310,20 @@ class PouringEnvBase(gym.Env):
 
         return (self.__observe(), {})
 
-    def approx_3rd_derivative(self, current_value, previous_values, time):
-        # required for jerk calculation
-        # using backward difference (https://de.mathworks.com/matlabcentral/answers/496527-how-calculate-the-second-and-third-numerical-derivative-of-one-variable-f-x)
-        # print(np.array(current_value) - np.array(previous_values[2]) + -3 * np.array(previous_values[0]) + 3 * np.array(previous_values[1]))
-        # print((current_value - 3 * np.array(previous_values[0]) + 3 * np.array(previous_values[1]) - previous_values[2]))
-        # (current_value - 3 * np.array(previous_values[0]) + 3 * np.array(previous_values[1]) - previous_values[2]) / (time**3)
-        return np.around(
-            (
-                np.array(current_value)
-                - np.array(previous_values[2])
-                + -3 * np.array(previous_values[0])
-                + 3 * np.array(previous_values[1])
-            )
-            / (time**3),
-            2,
-        )
+    def calculate_jerk(self, actions):
+        timestep_size = self.simulation.time_step_size * self.steps_per_action
+
+        actions = np.array(actions)
+        acc_0 = (actions[0] - actions[1])/timestep_size
+        acc_1 = (actions[1] - actions[2])/timestep_size
+
+        jerk = (acc_0 - acc_1)/timestep_size
+        
+        jerk = np.linalg.norm(jerk)
+        # scaling jerk to a useful size (would be in the thousands otherwise)
+        jerk = np.interp(jerk, [0, self.max_jerk], [0, 10])
+
+        return np.linalg.norm(jerk)
 
     def change_start_position(self, new_position):
         self.jug_start_position = new_position
