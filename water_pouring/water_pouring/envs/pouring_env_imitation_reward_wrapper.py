@@ -5,13 +5,16 @@ import numpy as np
 
 from scipy.spatial.transform import Rotation as R
 
+import os
+
 class ImitationRewardWrapper(gym.RewardWrapper):
 
   def __init__(self, env, trajectory_path, weight_task_objective, weight_imitation, weight_position, weight_rotation):
     super().__init__(env)
 
-    self.trajectory_path = trajectory_path
-    self.trajectory = np.load(trajectory_path)
+    dir = os.path.dirname(__file__)
+    self.trajectory_path = os.path.join(dir, f"PoseTrajectories/{trajectory_path}")
+    self.trajectory = np.load(self.trajectory_path)
     
     assert weight_task_objective + weight_imitation == 1, "Weights for task goal and imitation do not sum up to 1."
     self.weight_task_objective = weight_task_objective
@@ -45,5 +48,11 @@ class ImitationRewardWrapper(gym.RewardWrapper):
     # calculate total reward
     r_total = self.weight_task_objective * reward + self.weight_imitation * r_imitation
 
+    self.step_trajectory += 1
     return r_total
+
+  def reset(self, options=None, seed=None):
+    self.step_trajectory = 0
+
+    return self.env.reset(options=options, seed=seed)
     
