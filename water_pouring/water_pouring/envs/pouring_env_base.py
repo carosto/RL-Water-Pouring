@@ -208,6 +208,11 @@ class PouringEnvBase(gym.Env):
         particle_positions = particle_positions[sorted_indices]
         particle_velocities = particle_velocities[sorted_indices]
 
+        noise = np.random.normal(0, 0.001)
+
+        particle_positions += noise 
+        particle_velocities += noise
+
         normalized_particle_positions = np.interp(particle_positions, self.particle_bounds, [-1, 1])
         particle_velocities_clipped = np.clip(particle_velocities, -1, 1)  # normalize particle velocities
 
