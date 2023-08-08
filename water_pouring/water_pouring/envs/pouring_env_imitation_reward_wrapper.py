@@ -27,23 +27,27 @@ class ImitationRewardWrapper(gym.RewardWrapper):
     self.step_trajectory = 0
 
   def reward(self, reward):
-    reference_pose = self.trajectory[self.step_trajectory]
-    current_pose = self.env.simulation.get_object_position(0)
+    done_bool = self.env.terminated or self.env.truncated
+    if not done_bool:
+      reference_pose = self.trajectory[self.step_trajectory]
+      current_pose = self.env.simulation.get_object_position(0)
 
-    # calculate quaternion difference of the two poses (-> rotation difference)
-    rot_reference = R.from_quat(reference_pose[3:])
-    rot_current = R.from_quat(current_pose[3:])
+      # calculate quaternion difference of the two poses (-> rotation difference)
+      rot_reference = R.from_quat(reference_pose[3:])
+      rot_current = R.from_quat(current_pose[3:])
 
-    r_rotation = np.exp(-2 * (rot_current * rot_reference.inv()).magnitude() ** 2)
+      r_rotation = np.exp(-2 * (rot_current * rot_reference.inv()).magnitude() ** 2)
 
-    # calculate difference between positions 
-    position_reference = reference_pose[:3]
-    position_current = current_pose[:3]
+      # calculate difference between positions 
+      position_reference = reference_pose[:3]
+      position_current = current_pose[:3]
 
-    r_position = np.exp(-40 * np.linalg.norm(position_current - position_reference) ** 2)
+      r_position = np.exp(-40 * np.linalg.norm(position_current - position_reference) ** 2)
 
-    # calculate total imitation reward 
-    r_imitation = self.weight_position * r_position + self.weight_rotation * r_rotation
+      # calculate total imitation reward 
+      r_imitation = self.weight_position * r_position + self.weight_rotation * r_rotation
+    else:
+      r_imitation = 0
 
     # calculate total reward
     r_total = self.weight_task_objective * reward + self.weight_imitation * r_imitation
