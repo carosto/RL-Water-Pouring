@@ -19,8 +19,9 @@ class PouringEnvBase(gym.Env):
         use_gui=False,
         spill_punish=0.1,
         hit_reward=0.1,
-        jerk_punish=0.1,
-        particle_explosion_punish=0.1,
+        jerk_punish=0,
+        action_punish=0,
+        particle_explosion_punish=0,
         max_timesteps=500,
         use_fill_limit=False,
         jug_start_position=None,
@@ -54,17 +55,21 @@ class PouringEnvBase(gym.Env):
         self.spill_punish = spill_punish  # factor to punish spilled particles
         self.hit_reward = hit_reward  # factor to reward particles in the cup
         self.jerk_punish = jerk_punish  # factor to punish jerky movements
-        self.particle_explosion_punish = (
-            particle_explosion_punish  # factor to punish exploding particles (high acceleration)
-        )
+        self.action_punish = action_punish
+        self.particle_explosion_punish = particle_explosion_punish  # factor to punish exploding particles (high acceleration)
         self.time_step_punish = 0.1
 
         self.max_timesteps = max_timesteps
 
         self.max_spilled_particles = 350#100
 
-        if use_fill_limit:
-            self.max_fill = 150 # max amount of particles to fill in the cup
+        self.max_particles_cup = 175 # maximum amount of particles that fit into the cup
+
+        self.use_fill_limit = use_fill_limit
+
+        if self.use_fill_limit:
+            percentage_fill = random.uniform(0.5, 1)
+            self.max_fill = int(self.max_particles_cup * percentage_fill)
         else:
             self.max_fill = 350
 
@@ -100,7 +105,7 @@ class PouringEnvBase(gym.Env):
                 #spaces.Box(low=-1, high=1, shape=(350, 3), dtype=np.float64),  # velocities of particles
                 spaces.Box(low=-1, high=1, shape=(350,), dtype=np.float64), #distances from jug
                 spaces.Box(low=-1, high=1, shape=(350,), dtype=np.float64), #distances from cup
-                spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float64), # time
+                spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float64), # other features
             )
         )  # spaces.Box(low=0, high=self.max_timesteps, shape=(1,), dtype=np.float64)))
         # self.observation_space = spaces.utils.flatten_space(self.observation_space)
@@ -233,12 +238,21 @@ class PouringEnvBase(gym.Env):
         # calculate normalized timestep
         time_step = 2 * (self.time_step / self.max_timesteps) - 1
 
+        other_features = np.array([
+            2 * (self.simulation.n_particles_jug / self.max_particles) - 1, 
+            2 * (self.simulation.n_particles_cup / self.max_particles) - 1, 
+            2 * (self.simulation.n_particles_spilled / self.max_particles) - 1,
+            2 * (self.simulation.n_particles_pouring / self.max_particles) - 1,
+            time_step,
+            2 * (self.max_fill / self.max_particles) - 1
+            ])
+
         # observation = np.append(jug_position, cup_position)
         # observation = np.append(observation, np.array([n_particles_jug, n_particles_cup, n_particles_spilled, n_particles_pouring]))
         # observation = [jug_position, cup_position, [n_particles_jug, n_particles_cup, n_particles_spilled, n_particles_pouring]]
         # observation = [jug_position, particle_positions, time_step]
 
-        observation = (np.array(normalized_position), normalized_particle_data, np.array(normalized_distances_jug), np.array(normalized_distances_cup), np.array([time_step]))  # , np.array([time_step]))
+        observation = (np.array(normalized_position), normalized_particle_data, np.array(normalized_distances_jug), np.array(normalized_distances_cup), other_features)  # , np.array([time_step]))
         #observation = (np.array(normalized_position), normalized_particle_positions, particle_velocities_clipped)
         # observation = (np.array(jug_pos), particle_positions_clipped)
         return observation
@@ -255,20 +269,28 @@ class PouringEnvBase(gym.Env):
         # calculate jerk
         jerk = self.calculate_jerk(self.last_actions)
 
-        # TODO taken from yannik, check! (reward of previous step is taken into account)
+        # punish actions
+        action_magnitude = np.linalg.norm(self.last_actions[0])**2
+
+        """# TODO taken from yannik, check! (reward of previous step is taken into account)
         # reward: only newly spilled/hit particles are counted
         if self.simulation.n_particles_cup <= self.max_fill:
             hit_reward_result = self.hit_reward * (n_particles_cup - self.last_particles_cup)
         else:
             hit_reward_result = -self.spill_punish * (n_particles_cup - self.last_particles_cup)
 
-        spill_punish_result = self.spill_punish * (n_particles_spilled - self.last_particles_spilled)
+        spill_punish_result = self.spill_punish * (n_particles_spilled - self.last_particles_spilled)"""
 
+        
         """reward = (
             hit_reward_result - spill_punish_result - self.jerk_punish * jerk
         ) - self.time_step_punish  # - self.particle_explosion_punish * average_acceleration#(jerk_position + jerk_rotation)"""
 
-        reward = self.hit_reward * (n_particles_cup/self.max_particles) - self.spill_punish * (n_particles_spilled/self.max_particles) - self.jerk_punish * jerk - self.time_step_punish
+        reward = self.hit_reward * (n_particles_cup/self.max_particles) - self.spill_punish * (n_particles_spilled/self.max_particles) - self.action_punish * action_magnitude - self.jerk_punish * jerk - self.time_step_punish
+
+        if self.use_fill_limit:
+            max_fill_reward = ((self.max_fill - n_particles_cup)/self.max_particles) ** 2
+            reward -= max_fill_reward
 
         """max_reward = self.hit_reward * self.max_particles
         min_reward = self.spill_punish * self.max_particles + self.jerk_punish * np.linalg.norm(self.action_space[0].high) ** 2 + self.jerk_punish * np.linalg.norm(self.action_space[1].high) ** 2
@@ -312,6 +334,11 @@ class PouringEnvBase(gym.Env):
         self.truncated = False
 
         self.current_rotation_internal = self.initial_position_internal.copy()
+
+        if self.use_fill_limit:
+            percentage_fill = random.uniform(0.5, 1)
+            self.max_fill = int(self.max_particles_cup * percentage_fill)
+            print('Target fill: ', self.max_fill)
 
         return (self.__observe(), {})
 
