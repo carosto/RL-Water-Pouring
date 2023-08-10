@@ -286,10 +286,21 @@ class PouringEnvBase(gym.Env):
             hit_reward_result - spill_punish_result - self.jerk_punish * jerk
         ) - self.time_step_punish  # - self.particle_explosion_punish * average_acceleration#(jerk_position + jerk_rotation)"""
 
-        reward = self.hit_reward * (n_particles_cup/self.max_particles) - self.spill_punish * (n_particles_spilled/self.max_particles) - self.action_punish * action_magnitude - self.jerk_punish * jerk - self.time_step_punish
+        if self.use_fill_limit:
+            hit_reward = self.hit_reward * (-np.tanh(10 * ((n_particles_cup / self.max_fill) - 1)))
+        else:
+            hit_reward = self.hit_reward
+        
+        reward = (
+            hit_reward * (n_particles_cup / self.max_particles)
+            - self.spill_punish * (n_particles_spilled / self.max_particles)
+            - self.action_punish * action_magnitude
+            - self.jerk_punish * jerk
+            - self.time_step_punish
+        )
 
         if self.use_fill_limit:
-            max_fill_reward = ((self.max_fill - n_particles_cup)/self.max_particles) ** 2
+            max_fill_reward = 200 * ((self.max_fill - n_particles_cup)/self.max_particles) ** 2
             reward -= max_fill_reward
 
         """max_reward = self.hit_reward * self.max_particles
@@ -336,8 +347,11 @@ class PouringEnvBase(gym.Env):
         self.current_rotation_internal = self.initial_position_internal.copy()
 
         if self.use_fill_limit:
-            percentage_fill = random.uniform(0.5, 1)
-            self.max_fill = int(self.max_particles_cup * percentage_fill)
+            if options is not None:
+                self.max_fill = options['fixed fill goal']
+            else:
+                percentage_fill = random.uniform(0.5, 1)
+                self.max_fill = int(self.max_particles_cup * percentage_fill)
             print('Target fill: ', self.max_fill)
 
         return (self.__observe(), {})
