@@ -40,7 +40,7 @@ class PouringEnvBase(gym.Env):
         self.current_rotation_internal = self.initial_position_internal.copy()
 
         if jug_start_position is None:
-            self.jug_start_position = [0.5, 0, 0.5]
+            self.jug_start_position = [-0.04144097, -0.1583946, -0.22223671] # average taken from human data
             jug_start_rotation = R.from_euler("XYZ", [90, 180, 0], degrees=True)
             self.jug_start_position.extend(jug_start_rotation.as_quat())
         else:
