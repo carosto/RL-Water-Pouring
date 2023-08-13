@@ -34,7 +34,7 @@ class PouringEnvBase(gym.Env):
 
         self.jug_upright_rotation = R.from_euler("XYZ", [90, 180, 0], degrees=True).as_euler("XYZ", degrees=True)
         self.jug_upright_rotation_internal = np.array(
-            [0, 0, 0]
+            [0., 0., 0.]
         )  # rotation at which the jug is upright (needed as reference for rotation normalization)
         self.initial_position_internal = self.jug_upright_rotation_internal.copy()
         self.current_rotation_internal = self.initial_position_internal.copy()
@@ -89,9 +89,7 @@ class PouringEnvBase(gym.Env):
 
         # Define action and observation space
         # They must be gym.spaces objects
-        self.action_space = spaces.Tuple(
-            (spaces.Box(low=-1, high=1, shape=(3,)), spaces.Box(low=-1, high=1, shape=(3,)))
-        )  # action space needs to be implemented for everything to run
+        self.action_space = spaces.Box(low=np.array([-0.005, -0.005, -0.005, -1., -1., -1.]), high=np.array([0.005, 0.005, 0.005, 1., 1., 1.]), shape=(6,))  # action space needs to be implemented for everything to run
 
         self.observation_space = spaces.Tuple(
             (
@@ -130,7 +128,7 @@ class PouringEnvBase(gym.Env):
 
     def step(self, action):
         # Execute one time step within the environment
-
+        action = [action[:3], action[3:]]
         # add the current action to the list and remove the oldest one (length always kept at 3)
         self.last_actions.insert(0, action)
         self.last_actions.pop()
