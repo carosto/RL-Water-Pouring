@@ -330,6 +330,9 @@ class PouringEnvBase(gym.Env):
         if self.simulation.is_initialized:
             self.simulation.cleanup()
 
+        if options is not None and "cleanup" in options.keys(): # required when opening and closing multiple environments in one script, otherwise the remaining simulation will cause a segmentation fault
+            return None
+
         self.simulation.init_simulation()
         self.max_particles = self.simulation.get_number_of_particles()
         self.last_actions = [[[0,0,0], [0,0,0]], [[0,0,0], [0, 0, 0]], [[0,0,0],[0, 0, 0]]] # required for calculation of jerk
