@@ -30,4 +30,4 @@ class XRotationWrapper(gym.ActionWrapper):
     self.action_space = spaces.Box(low=-1, high=1)
 
   def action(self, act):
-          return [0,0,0, act, 0,0,0]#[np.zeros(3), [act[0], 0, 0]]
+          return [0,0,0, act[0],0,0]#[np.zeros(3), [act[0], 0, 0]]
