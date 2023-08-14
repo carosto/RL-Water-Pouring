@@ -211,7 +211,7 @@ class PouringEnvBase(gym.Env):
         particle_positions = particle_positions[sorted_indices]
         particle_velocities = particle_velocities[sorted_indices]
 
-        noise = np.random.normal(0, 0.001)
+        noise = np.random.normal(-0.001, 0.001)
 
         particle_positions += noise 
         particle_velocities += noise
