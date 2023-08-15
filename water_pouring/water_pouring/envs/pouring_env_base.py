@@ -103,7 +103,7 @@ class PouringEnvBase(gym.Env):
                 #spaces.Box(low=-1, high=1, shape=(350, 3), dtype=np.float64),  # velocities of particles
                 spaces.Box(low=-1, high=1, shape=(350,), dtype=np.float64), #distances from jug
                 spaces.Box(low=-1, high=1, shape=(350,), dtype=np.float64), #distances from cup
-                spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float64), # other features
+                spaces.Box(low=-1, high=1, shape=(6,) if self.use_fill_limit else (5,), dtype=np.float64), # other features
             )
         )  # spaces.Box(low=0, high=self.max_timesteps, shape=(1,), dtype=np.float64)))
         # self.observation_space = spaces.utils.flatten_space(self.observation_space)
@@ -242,8 +242,10 @@ class PouringEnvBase(gym.Env):
             2 * (self.simulation.n_particles_spilled / self.max_particles) - 1,
             2 * (self.simulation.n_particles_pouring / self.max_particles) - 1,
             time_step,
-            2 * (self.max_fill / self.max_particles) - 1
             ])
+
+        if self.use_fill_limit:
+            other_features = np.append(other_features, 2 * (self.max_fill / self.max_particles) - 1)
 
         # observation = np.append(jug_position, cup_position)
         # observation = np.append(observation, np.array([n_particles_jug, n_particles_cup, n_particles_spilled, n_particles_pouring]))
@@ -259,38 +261,14 @@ class PouringEnvBase(gym.Env):
         n_particles_cup = self.simulation.n_particles_cup
         n_particles_spilled = self.simulation.n_particles_spilled
 
-        # penalize high acceration for particles (-> exploding)
-        particle_accelerations = self.simulation.get_particle_accelerations()
-        acceleration_magnitudes = np.linalg.norm(particle_accelerations, axis=1)
-        average_acceleration = np.mean(acceleration_magnitudes)
-
         # calculate jerk
         jerk = self.calculate_jerk(self.last_actions)
 
         # punish actions
         action_magnitude = np.linalg.norm(self.last_actions[0])**2
-
-        """# TODO taken from yannik, check! (reward of previous step is taken into account)
-        # reward: only newly spilled/hit particles are counted
-        if self.simulation.n_particles_cup <= self.max_fill:
-            hit_reward_result = self.hit_reward * (n_particles_cup - self.last_particles_cup)
-        else:
-            hit_reward_result = -self.spill_punish * (n_particles_cup - self.last_particles_cup)
-
-        spill_punish_result = self.spill_punish * (n_particles_spilled - self.last_particles_spilled)"""
-
-        
-        """reward = (
-            hit_reward_result - spill_punish_result - self.jerk_punish * jerk
-        ) - self.time_step_punish  # - self.particle_explosion_punish * average_acceleration#(jerk_position + jerk_rotation)"""
-
-        if self.use_fill_limit:
-            hit_reward = self.hit_reward * (-np.tanh(10 * ((n_particles_cup / self.max_fill) - 1)))
-        else:
-            hit_reward = self.hit_reward
-        
+    
         reward = (
-            hit_reward * (n_particles_cup / self.max_particles)
+            self.hit_reward * (n_particles_cup / self.max_particles)
             - self.spill_punish * (n_particles_spilled / self.max_particles)
             - self.action_punish * action_magnitude
             - self.jerk_punish * jerk
@@ -301,28 +279,6 @@ class PouringEnvBase(gym.Env):
             max_fill_reward = 200 * ((self.max_fill - n_particles_cup)/self.max_particles) ** 2
             reward -= max_fill_reward
 
-        """max_reward = self.hit_reward * self.max_particles
-        min_reward = self.spill_punish * self.max_particles + self.jerk_punish * np.linalg.norm(self.action_space[0].high) ** 2 + self.jerk_punish * np.linalg.norm(self.action_space[1].high) ** 2
-        # reward = hit_reward_result - spill_punish_result - self.jerk_punish * jerk - self.time_step_punish
-        normalized_reward = np.interp(reward, [-min_reward, max_reward], [-1, 1])"""
-
-        if np.isnan(reward):
-            print(n_particles_cup)
-            print(n_particles_spilled)
-            print(jerk)
-            print(np.array(particle_accelerations).shape)
-            print(acceleration_magnitudes)
-            print(average_acceleration)
-        # TODO add distance metric between cup and jug?
-        """
-        has_collided = self.simulation.collision
-
-        if has_collided:
-            print("collision")
-            reward -= 1000"""
-
-        self.last_particles_cup = n_particles_cup
-        self.last_particles_spilled = n_particles_spilled
         return reward
 
     def reset(self, options=None, seed=None):
