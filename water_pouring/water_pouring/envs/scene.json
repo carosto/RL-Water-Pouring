@@ -35,7 +35,7 @@
                 1
             ],
             "id": "Fluid",
-            "particleFile": "LiquidParticles/beakernew_fluid_block_p006_v5.bgeo"
+            "particleFile": "LiquidParticles/beakernew_fluid_block_v6.bgeo"
         }
     ]
 }
