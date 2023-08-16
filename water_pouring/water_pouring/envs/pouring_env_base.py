@@ -266,7 +266,18 @@ class PouringEnvBase(gym.Env):
 
         # punish actions
         action_magnitude = np.linalg.norm(self.last_actions[0])**2
+        
+        reward = self._calc_reward(n_particles_cup, n_particles_spilled, jerk, action_magnitude)
+
+        if self.use_fill_limit:
+            min_reward = min(self._calc_reward(0,self.max_particles, 10, np.linalg.norm(self.action_space.high)**2), self._calc_reward(self.max_particles_cup, self.max_particles, 10, np.linalg.norm(self.action_space.high)**2))
+
+            # scale reward to range
+            reward = np.interp(reward, [min_reward, 0], [-1,0])
+
+        return reward
     
+    def _calc_reward(self, n_particles_cup, n_particles_spilled, jerk, action_magnitude):
         reward = (
             self.hit_reward * (n_particles_cup / self.max_particles)
             - self.spill_punish * (n_particles_spilled / self.max_particles)
@@ -275,8 +286,13 @@ class PouringEnvBase(gym.Env):
             - self.time_step_punish
         )
 
+        # keep range of rewards the same for all target fill levels (-> min-max normalization)
         if self.use_fill_limit:
-            max_fill_reward = 200 * ((self.max_fill - n_particles_cup)/self.max_particles) ** 2
+            min_reward = 0
+            max_reward = max((((self.max_fill - 0)/self.max_particles) ** 2), (((self.max_fill - self.max_particles_cup)/self.max_particles) ** 2))
+
+            max_fill_reward = 50 * ((((self.max_fill - n_particles_cup)/self.max_particles) ** 2) - min_reward) / (max_reward - min_reward)
+            #max_fill_reward = 200 * ((self.max_fill - n_particles_cup)/self.max_particles) ** 2
             reward -= max_fill_reward
 
         return reward
