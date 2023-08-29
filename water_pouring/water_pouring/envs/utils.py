@@ -1,3 +1,5 @@
+# script to generate jug positions from trajectory (required for deep mimic)
+
 from scipy.spatial.transform import Rotation as R
 import numpy as np
 import os
@@ -47,8 +49,8 @@ path = "PoseTrajectories"
 if not os.path.exists(f"./{path}"):
     os.makedirs(f"./{path}")
 
-trajectory = get_pose_trajectory_from_actions("/home/carola/bachelorthesis/TD3/RandomTrajectories/random_trajectory_0.npy")
+trajectory = get_pose_trajectory_from_actions("/home/carola/bachelorthesis/TD3/RandomTrajectories/random_trajectory_10.npy")
 
 trajectory = np.array(trajectory)
-np.save(f"{path}/x_rotation_0.npy", trajectory)
+#np.save(f"{path}/x_rotation_10.npy", trajectory)
 

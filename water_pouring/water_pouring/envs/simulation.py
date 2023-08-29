@@ -6,7 +6,7 @@ import vtk
 
 import pysplishsplash.Utilities.SceneLoaderStructs as Scenes
 
-vtk.vtkLogger.SetStderrVerbosity(vtk.vtkLogger.VERBOSITY_OFF)  # TODO check vtkMath::Jacobi warning for collision check
+vtk.vtkLogger.SetStderrVerbosity(vtk.vtkLogger.VERBOSITY_OFF)
 
 from scipy.spatial.transform import Rotation as R
 
@@ -31,7 +31,7 @@ class Simulation:
         self.jug_path = os.path.join(os.path.dirname(__file__), f"ObjectFiles/{self.jug_name}.obj")
 
         # calculate the bounds of the cup (it does not move, so this only has to be done once)
-        self.cup_obj = pyvista.read(self.cup_path)  # f"../ObjectFiles/{self.cup_name}.obj")
+        self.cup_obj = pyvista.read(self.cup_path) 
         cup_position = self.cup_position[:3]
         cup_rotation = self.cup_position[3:]
 
@@ -42,17 +42,15 @@ class Simulation:
 
         self.jug_obj = pyvista.read(
             self.jug_path
-        )  # f"water_pouring/water_pouring/envs/ObjectFiles/{self.jug_name}.obj")
+        )
         self.spilled_collector_grid = pyvista.read(
             os.path.join(os.path.dirname(__file__), "ObjectFiles/UnitBox_open.obj")
-        )  # "water_pouring/water_pouring/envs/ObjectFiles/UnitBox_open.obj")
+        )
 
         self.n_particles_cup = 0
         self.n_particles_jug = 0
         self.n_particles_spilled = 0
         self.n_particles_pouring = 0
-
-        # self.collision = False
 
         self.is_initialized = False
 
@@ -62,7 +60,7 @@ class Simulation:
             useGui=self.use_gui,
             sceneFile=os.path.abspath(
                 os.path.join(os.path.dirname(__file__), self.scene_file)
-            ),  #'water_pouring/water_pouring/envs/scene.json'),
+            ),
             stopAt=5,
             outputDir=self.output_directory,
         )
@@ -77,12 +75,13 @@ class Simulation:
         rots = self.jug_start_position[3:]
         vec = rots[:3]
         s = rots[3]
+
         # formula to transform quaternions into axis angle format: see wikipedia
         theta = 2 * np.arctan2(np.linalg.norm(vec), s)
         w = (vec / np.sin(theta / 2)) if theta != 0 else 0
         scene.boundaryModels.append(
             Scenes.BoundaryData(
-                meshFile=self.jug_path,  # f'ObjectFiles/{jug_file}',
+                meshFile=self.jug_path,
                 translation=self.jug_start_position[:3],
                 scale=[1, 1, 1],
                 color=[0.5, 0.5, 0.5, 1.0],
@@ -105,7 +104,7 @@ class Simulation:
         w = (vec / np.sin(theta / 2)) if theta != 0 else 0
         scene.boundaryModels.append(
             Scenes.BoundaryData(
-                meshFile=self.cup_path,  # f'ObjectFiles/{cup_file}',
+                meshFile=self.cup_path,
                 translation=self.cup_position[:3],
                 scale=[1, 1, 1],
                 color=[0.5, 0.5, 0.5, 1.0],
@@ -118,27 +117,12 @@ class Simulation:
             )
         )
 
-        # scene.camPosition = [1, 2, 2.]
 
         fluid_init_pos = np.array(self.jug_start_position[:3])
-        """fluid_init_pos_upper = fluid_init_pos + [0.07, 0.175, 0.07]
-
-        scene.fluidBlocks.append(
-                Scenes.FluidBlock(
-                    id='Fluid',
-                    boxMin=fluid_init_pos,
-                    boxMax=fluid_init_pos_upper,
-                    mode=0,
-                    initialVelocity=[0.0, 0.0, 0.0],
-                )
-            )"""
 
         base.initSimulation()
 
         sim = sph.Simulation.getCurrent()
-        # sim.setValueInt(sim.BOUNDARY_HANDLING_METHOD, 0)
-
-        # base.readFluidParticlesState('water_pouring/water_pouring/envs/LiquidParticles/beakernew_fluid_block_p006_v5.bgeo', sim.getFluidModel(0))
 
         # move particles to the start position of the jug
         fluid_model = sim.getFluidModel(0)
@@ -166,8 +150,6 @@ class Simulation:
         self.n_particles_jug = 0
         self.n_particles_spilled = 0
         self.n_particles_pouring = 0
-
-        # self.collision = False
 
         self.particles_ids_cup = []
         self.particles_ids_jug = []
@@ -201,7 +183,6 @@ class Simulation:
             animated_body.setRotation(R.from_euler("XYZ", old_rotation, degrees=True).as_quat())
             animated_body.animate()
         # keep the cup at a constant position
-        # TODO ist das nötig? (ansonsten macht das return oben schwierigkeiten!)
         boundary = sim.getBoundaryModel(1)
         animated_body = boundary.getRigidBodyObject()  # second object is cup
         animated_body.setPosition(self.cup_position[:3])
@@ -277,21 +258,6 @@ class Simulation:
         )
         jug_bounds = transformed_jug.bounds
 
-        """#spilled particles in base of cup.. 
-        spilled_collector_bounds = self.spilled_collector_grid.bounds
-        
-        spilled_collector_bounds = self.__scale_bounds(spilled_collector_bounds, self.cup_scale)
-        
-        boundary = sim.getBoundaryModel(2) 
-        animated_body = boundary.getRigidBodyObject()
-        spilled_collector_position = animated_body.getPosition()
-        spilled_collector_rotation = animated_body.getRotation()
-        
-        spilled_collector_bounds = self.__move_bounds(spilled_collector_bounds, spilled_collector_position)
-        
-        spilled_collector_rotation = R.from_quat(spilled_collector_rotation)
-        spilled_collector_bounds = self.__rotate_bounds(spilled_collector_bounds, spilled_collector_rotation)"""
-
         # collecting the particles in each area
         (
             liq_count_cup,
@@ -313,9 +279,6 @@ class Simulation:
         # all particles within cup, jug and collector
         liq_ids_in_objs = liq_ids_jug + liq_ids_cup
 
-        # print('Number particles: ', fluid_model.numberOfParticles())
-        # print('Particles in objects: ', len(liq_ids_in_objs))
-
         self.n_particles_cup = len(liq_ids_cup)
         self.n_particles_jug = len(liq_ids_jug)
         self.n_particles_spilled = len(liq_ids_spilled)  # fluid_model.numberOfParticles() - len(liq_ids_in_objs)
@@ -323,20 +286,8 @@ class Simulation:
             fluid_model.getNumActiveParticles0() - self.n_particles_spilled - len(liq_ids_in_objs)
         )
 
-        # print('Cup: ', self.n_particles_cup, ' Jug: ', self.n_particles_jug, ' Spilled: ', self.n_particles_spilled, ' Pouring: ', self.n_particles_pouring)
-
     def __check_collision(self, cup_position, cup_rotation, jug_position, jug_rotation):
         # transform the jug obj to the current pose and check for collisions with the cup obj
-        """sim = sph.Simulation.getCurrent()
-        boundary = sim.getBoundaryModel(0)
-        animated_body = boundary.getRigidBodyObject()
-        jug_position = animated_body.getPosition()
-        jug_rotation = animated_body.getRotation()
-
-        boundary = sim.getBoundaryModel(1)
-        animated_body = boundary.getRigidBodyObject()
-        cup_position = animated_body.getPosition()
-        cup_rotation = animated_body.getRotation()"""
 
         transformed_jug = self.jug_obj.transform(
             self.__transform_matrix_func(jug_position, jug_rotation), inplace=False
@@ -346,13 +297,11 @@ class Simulation:
         )
         _, n_collisions = transformed_cup.collision(
             transformed_jug, contact_mode=1
-        )  # self.cup_obj.collision(transformed_jug, contact_mode=1)
+        ) 
 
         if n_collisions > 0:
-            # self.collision = True
             return True
         else:
-            # self.collision = False
             return False
 
     def get_object_position(self, object_number):
@@ -377,8 +326,6 @@ class Simulation:
             p = fluid_model.getPosition(i)
             p = self.change_of_coordinates(self.cup_position, p)
             v = fluid_model.getVelocity(i)
-            # temp = [-100 if np.isnan(x) else x for x in np.append(p, v)] # remove nan values
-            # positions.append(np.nan_to_num(np.append(p, v), nan=-1))
             positions[id] = np.nan_to_num(p, nan=-100)
             velocities[id] = np.nan_to_num(v, nan=-100)
         return positions, velocities

@@ -1,3 +1,4 @@
+# wrapper used to add imitation reward to task reward
 import gymnasium as gym
 from gymnasium import spaces
 
@@ -12,8 +13,8 @@ class ImitationRewardWrapper(gym.RewardWrapper):
   def __init__(self, env, trajectory_path, weight_task_objective, weight_imitation, weight_position, weight_rotation):
     super().__init__(env)
 
-    dir = os.path.dirname(__file__)
-    self.trajectory_path = os.path.join(dir, f"PoseTrajectories/{trajectory_path}")
+    self.dir = os.path.dirname(__file__)
+    self.trajectory_path = os.path.join(self.dir, f"PoseTrajectories/{trajectory_path}")
     self.trajectory = np.load(self.trajectory_path)
     
     assert weight_task_objective + weight_imitation == 1, "Weights for task goal and imitation do not sum up to 1."
@@ -27,6 +28,11 @@ class ImitationRewardWrapper(gym.RewardWrapper):
     self.step_trajectory = 0
 
   def reward(self, reward):
+    if self.env.use_fill_limit and self.step_trajectory == 0:
+      # load trajectories for specific fill level
+      self.trajectory_path = os.path.join(self.dir, f"FillGoal_Poses/x_rotation_{self.env.max_fill}.npy")
+      self.trajectory = np.load(self.trajectory_path)
+      print("Loaded: ", f"FillGoal_Poses/x_rotation_{self.env.max_fill}")
     done_bool = self.env.terminated or self.env.truncated
     if not done_bool:
       reference_pose = self.trajectory[self.step_trajectory]
