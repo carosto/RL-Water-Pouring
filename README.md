@@ -7,7 +7,7 @@ This repository contains the OpenAI Gymnasium environment used to model the pour
 ## Installation
 Requirements: 
 - Python 3.7
-- packages listed in requirements.txt
+- packages listed in requirements.txt (these also include everything required for running my TD3 implementation (https://github.com/carosto/TD3)
 - my modified SPlisHSPlasH version (https://github.com/carosto/SPlisHSPlasH)
 
 After the requirements are fulfilled, the environment can be install by running 'pip install -e .' in the folder where the setup.py file is located.
