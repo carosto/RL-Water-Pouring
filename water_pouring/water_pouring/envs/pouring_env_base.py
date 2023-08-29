@@ -191,14 +191,14 @@ class PouringEnvBase(gym.Env):
             print("Out of rotation bounds")
             self.terminated = True
 
-        if np.isclose(obs_rotation[0], 0, atol=0.1) and np.isclose(
+        """if np.isclose(obs_rotation[0], 0, atol=0.1) and np.isclose(
             self.simulation.n_particles_cup, self.max_fill, atol=50
         ):
             if self.n_steps_turned_back < 10:
                 self.n_steps_turned_back += 1
             else:
                 print("Stopped at turned back position")
-                self.terminated = True
+                self.terminated = True"""
 
         # done when all particles have poured out
         if self.simulation.n_particles_jug == 0 and self.simulation.n_particles_pouring == 0:
@@ -305,9 +305,9 @@ class PouringEnvBase(gym.Env):
 
         if self.use_fill_limit:
             min_reward = min(
-                self._calc_reward(0, self.max_particles, 10, np.linalg.norm(self.action_space.high) ** 2),
+                self._calc_reward(0, self.max_particles, 10, np.linalg.norm([0,0,0,1,0,0]) ** 2),
                 self._calc_reward(
-                    self.max_particles_cup, self.max_particles, 10, np.linalg.norm(self.action_space.high) ** 2
+                    self.max_particles_cup, self.max_particles, 10, np.linalg.norm([0,0,0,1,0,0]) ** 2
                 ),
             )
 

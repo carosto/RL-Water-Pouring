@@ -132,3 +132,4 @@ Cache/
 imgui.ini
 .vscode/launch.json
 .gitignore
+*.npy
