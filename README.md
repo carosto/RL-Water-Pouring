@@ -1,6 +1,6 @@
 # RL-Water-Pouring environment
 
-![gif](supplementary material/pretrained_actor_no_goal.gif)
+![gif](https://github.com/carosto/RL-Water-Pouring/blob/1481f0196f0f138cb54d503597f39d54a8ebe825/supplementary%20material/pretrained_actor_no_goal.gif)
 
 This repository contains the OpenAI Gymnasium environment used to model the pouring task for my bachelor's thesis.
 
